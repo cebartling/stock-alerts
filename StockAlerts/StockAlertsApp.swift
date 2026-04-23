@@ -5,6 +5,7 @@ import SwiftData
 struct StockAlertsApp: App {
     private let container: ModelContainer
     @StateObject private var engine: QuoteEngine
+    @State private var powerObserver: PowerObserver?
 
     init() {
         let container: ModelContainer
@@ -40,6 +41,12 @@ struct StockAlertsApp: App {
                 .modelContainer(container)
                 .task {
                     await NotificationAuthorizer.requestAuthorization()
+                    if powerObserver == nil {
+                        powerObserver = PowerObserver(
+                            onSleep: { engine.stop() },
+                            onWake: { engine.start() }
+                        )
+                    }
                     engine.start()
                 }
         } label: {
