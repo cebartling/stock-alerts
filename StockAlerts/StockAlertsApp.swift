@@ -56,6 +56,13 @@ struct StockAlertsApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("Stock Alerts", id: "main") {
+            MainWindowView()
+                .environmentObject(engine)
+                .modelContainer(container)
+        }
+        .defaultSize(width: 800, height: 520)
+
         Settings {
             SettingsView()
                 .environmentObject(engine)
