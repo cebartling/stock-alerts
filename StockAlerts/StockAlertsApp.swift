@@ -36,7 +36,7 @@ struct StockAlertsApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            WatchlistView()
+            MenuBarPopoverView()
                 .environmentObject(engine)
                 .modelContainer(container)
                 .task {
