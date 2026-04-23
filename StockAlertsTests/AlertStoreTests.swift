@@ -84,4 +84,51 @@ struct AlertStoreTests {
         #expect(alert.isTriggered == false)
         #expect(alert.triggeredAt == nil)
     }
+
+    @Test
+    func alertsForSymbol_unmatchedSymbol_returnsEmpty() {
+        let store = AlertStore(context: context)
+        store.add(PriceAlert(symbol: "AAPL", condition: .above, threshold: 1))
+        #expect(store.alerts(for: "ZZZ").isEmpty)
+    }
+
+    @Test
+    func multipleAlerts_onSameSymbol_allReturned() {
+        let store = AlertStore(context: context)
+        store.add(PriceAlert(symbol: "AAPL", condition: .above, threshold: 100))
+        store.add(PriceAlert(symbol: "AAPL", condition: .below, threshold: 50))
+        store.add(PriceAlert(symbol: "AAPL", condition: .percentChangeUp, threshold: 5))
+
+        #expect(store.alerts(for: "AAPL").count == 3)
+    }
+
+    @Test
+    func reset_onNeverTriggered_leavesStateFalse() {
+        let store = AlertStore(context: context)
+        let alert = PriceAlert(symbol: "AAPL", condition: .above, threshold: 1)
+        store.add(alert)
+        store.reset(alert)
+
+        #expect(alert.isTriggered == false)
+        #expect(alert.triggeredAt == nil)
+    }
+
+    @Test
+    func markTriggered_thenReset_thenMarkTriggered_refires() throws {
+        let store = AlertStore(context: context)
+        let alert = PriceAlert(symbol: "AAPL", condition: .above, threshold: 1)
+        store.add(alert)
+
+        store.markTriggered(alert)
+        #expect(alert.isTriggered == true)
+
+        store.reset(alert)
+        #expect(alert.isTriggered == false)
+        #expect(alert.triggeredAt == nil)
+
+        store.markTriggered(alert)
+        #expect(alert.isTriggered == true)
+        let triggeredAt = try #require(alert.triggeredAt)
+        #expect(triggeredAt.timeIntervalSinceNow > -5)
+    }
 }

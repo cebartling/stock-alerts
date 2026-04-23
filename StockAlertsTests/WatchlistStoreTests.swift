@@ -93,4 +93,55 @@ struct WatchlistStoreTests {
         let second = WatchlistStore(context: context)
         #expect(second.symbols == ["AAPL", "MSFT"])
     }
+
+    @Test
+    func reorder_movesLastToFront() {
+        let store = WatchlistStore(context: context)
+        store.add("A")
+        store.add("B")
+        store.add("C")
+        // Move C (index 2) to offset 0 -> expected: C, A, B
+        store.reorder(from: IndexSet(integer: 2), to: 0)
+        #expect(store.symbols == ["C", "A", "B"])
+    }
+
+    @Test
+    func reorder_moveToSameOffset_isNoOp() {
+        let store = WatchlistStore(context: context)
+        store.add("A")
+        store.add("B")
+        store.add("C")
+        // Moving A to offset 0 (its current position) is a no-op.
+        store.reorder(from: IndexSet(integer: 0), to: 0)
+        #expect(store.symbols == ["A", "B", "C"])
+    }
+
+    @Test
+    func reorder_onSingleItemList_remainsStable() {
+        let store = WatchlistStore(context: context)
+        store.add("ONLY")
+        store.reorder(from: IndexSet(integer: 0), to: 1)
+        #expect(store.symbols == ["ONLY"])
+    }
+
+    @Test
+    func remove_preservesOrderOfRemainingItems() {
+        let store = WatchlistStore(context: context)
+        store.add("A")
+        store.add("B")
+        store.add("C")
+        store.add("D")
+        store.remove("B")
+        #expect(store.symbols == ["A", "C", "D"])
+    }
+
+    @Test
+    func addAfterRemove_placesNewSymbolAtEnd() {
+        let store = WatchlistStore(context: context)
+        store.add("A")
+        store.add("B")
+        store.remove("A")
+        store.add("C")
+        #expect(store.symbols == ["B", "C"])
+    }
 }

@@ -162,4 +162,77 @@ struct FinnhubQuoteServiceTests {
         #expect(bySymbol["MSFT"] == 200)
         #expect(bySymbol["GOOG"] == 300)
     }
+
+    @Test
+    func fetchQuotes_emptySymbols_returnsEmpty() async throws {
+        // Handler is defensive but should never be called.
+        nonisolated(unsafe) var callCount = 0
+        StubURLProtocol.requestHandler = { request in
+            callCount += 1
+            let data = try JSONSerialization.data(
+                withJSONObject: ["c": 1.0, "pc": 1.0, "t": 0]
+            )
+            return (self.http(request.url!, 200), data)
+        }
+        defer { StubURLProtocol.reset() }
+
+        let service = FinnhubQuoteService(apiKey: "k", session: StubURLProtocol.makeSession())
+        let quotes = try await service.fetchQuotes(symbols: [])
+        #expect(quotes.isEmpty)
+        #expect(callCount == 0)
+    }
+
+    @Test
+    func fetchQuotes_partialFailure_throwsFirstError() async {
+        // One symbol gets rate-limited. fetchQuotes uses withThrowingTaskGroup,
+        // so any child throw makes the whole call throw.
+        StubURLProtocol.requestHandler = { request in
+            let sym = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "symbol" })?.value ?? "?"
+            if sym == "BAD" {
+                return (self.http(request.url!, 429), Data())
+            }
+            let data = try JSONSerialization.data(
+                withJSONObject: ["c": 100.0, "pc": 99.0, "t": 1_700_000_000]
+            )
+            return (self.http(request.url!, 200), data)
+        }
+        defer { StubURLProtocol.reset() }
+
+        let service = FinnhubQuoteService(apiKey: "k", session: StubURLProtocol.makeSession())
+
+        do {
+            _ = try await service.fetchQuotes(symbols: ["AAPL", "BAD"])
+            Issue.record("Expected fetchQuotes to throw when one symbol fails")
+        } catch let error as QuoteServiceError {
+            if case .rateLimited = error {
+                // ok — the BAD symbol's 429 bubbled up
+            } else {
+                Issue.record("Expected .rateLimited, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected QuoteServiceError, got \(error)")
+        }
+    }
+
+    @Test
+    func fetchQuote_requestHitsQuoteEndpoint() async throws {
+        nonisolated(unsafe) var capturedURL: URL?
+        StubURLProtocol.requestHandler = { request in
+            capturedURL = request.url
+            let data = try JSONSerialization.data(
+                withJSONObject: ["c": 1.0, "pc": 1.0, "t": 0]
+            )
+            return (self.http(request.url!, 200), data)
+        }
+        defer { StubURLProtocol.reset() }
+
+        let service = FinnhubQuoteService(apiKey: "k", session: StubURLProtocol.makeSession())
+        _ = try await service.fetchQuote(symbol: "AAPL")
+
+        let url = try #require(capturedURL)
+        #expect(url.host == "finnhub.io")
+        #expect(url.path == "/api/v1/quote")
+        #expect(url.scheme == "https")
+    }
 }

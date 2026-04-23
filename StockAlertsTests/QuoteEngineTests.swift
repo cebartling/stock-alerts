@@ -170,6 +170,123 @@ struct QuoteEngineTests {
             Issue.record("Expected rateLimited, got \(String(describing: engine.lastError))")
         }
     }
+
+    @Test
+    func tick_nonQuoteServiceError_wrappedAsNetwork() async {
+        let watchlist = WatchlistStore(context: context)
+        watchlist.add("AAPL")
+        let alertStore = AlertStore(context: context)
+        let service = GenericThrowingQuoteService(error: URLError(.notConnectedToInternet))
+        let engine = QuoteEngine(
+            service: service,
+            alertStore: alertStore,
+            watchlistStore: watchlist,
+            notifications: FakeNotificationScheduler(),
+            isMarketOpen: { true }
+        )
+
+        await engine.tick()
+
+        if case .network(let underlying) = engine.lastError,
+           let urlError = underlying as? URLError {
+            #expect(urlError.code == .notConnectedToInternet)
+        } else {
+            Issue.record("Expected .network wrapping URLError, got \(String(describing: engine.lastError))")
+        }
+    }
+
+    // MARK: - multiple alerts / multiple symbols
+
+    @Test
+    func tick_multipleAlertsOnSameSymbol_firesEachMatchIndependently() async {
+        let watchlist = WatchlistStore(context: context)
+        watchlist.add("AAPL")
+        let alertStore = AlertStore(context: context)
+        let above100 = PriceAlert(symbol: "AAPL", condition: .above, threshold: 100)
+        let above160 = PriceAlert(symbol: "AAPL", condition: .above, threshold: 160)
+        let above200 = PriceAlert(symbol: "AAPL", condition: .above, threshold: 200)
+        alertStore.add(above100)
+        alertStore.add(above160)
+        alertStore.add(above200)
+
+        // Price 170 straddles the thresholds: 170>=100 ✓, 170>=160 ✓, 170>=200 ✗.
+        let service = FakeQuoteService(result: .success([makeQuote("AAPL", price: 170)]))
+        let scheduler = FakeNotificationScheduler()
+        let engine = QuoteEngine(
+            service: service,
+            alertStore: alertStore,
+            watchlistStore: watchlist,
+            notifications: scheduler,
+            isMarketOpen: { true }
+        )
+
+        await engine.tick()
+
+        #expect(scheduler.scheduled.count == 2)
+        let firedIds = Set(scheduler.scheduled.map(\.id))
+        #expect(firedIds.contains(above100.id.uuidString))
+        #expect(firedIds.contains(above160.id.uuidString))
+        #expect(!firedIds.contains(above200.id.uuidString))
+        #expect(above100.isTriggered == true)
+        #expect(above160.isTriggered == true)
+        #expect(above200.isTriggered == false)
+    }
+
+    @Test
+    func tick_multipleSymbols_onlyMatchingOnesFireAlerts() async {
+        let watchlist = WatchlistStore(context: context)
+        watchlist.add("AAPL")
+        watchlist.add("MSFT")
+        let alertStore = AlertStore(context: context)
+        let aaplAlert = PriceAlert(symbol: "AAPL", condition: .above, threshold: 100)
+        let msftAlert = PriceAlert(symbol: "MSFT", condition: .below, threshold: 50)  // won't match
+        alertStore.add(aaplAlert)
+        alertStore.add(msftAlert)
+
+        let service = FakeQuoteService(result: .success([
+            makeQuote("AAPL", price: 200),
+            makeQuote("MSFT", price: 300),
+        ]))
+        let scheduler = FakeNotificationScheduler()
+        let engine = QuoteEngine(
+            service: service,
+            alertStore: alertStore,
+            watchlistStore: watchlist,
+            notifications: scheduler,
+            isMarketOpen: { true }
+        )
+
+        await engine.tick()
+
+        #expect(scheduler.scheduled.count == 1)
+        #expect(scheduler.scheduled.first?.id == aaplAlert.id.uuidString)
+        #expect(aaplAlert.isTriggered == true)
+        #expect(msftAlert.isTriggered == false)
+    }
+
+    @Test
+    func tick_populatesQuoteCacheEvenWhenNoAlertMatches() async {
+        let watchlist = WatchlistStore(context: context)
+        watchlist.add("AAPL")
+        let (engine, scheduler, _) = makeEngine(
+            quotes: .success([makeQuote("AAPL", price: 150)])
+        )
+
+        await engine.tick()
+
+        #expect(engine.quotes["AAPL"]?.price == 150)
+        #expect(scheduler.scheduled.isEmpty)
+    }
+}
+
+// Secondary fake used only by the non-QuoteServiceError test. The main
+// FakeQuoteService is parameterized on QuoteServiceError, so this one covers
+// the path where the service throws anything else.
+actor GenericThrowingQuoteService: QuoteService {
+    private let error: Error
+    init(error: Error) { self.error = error }
+    func fetchQuote(symbol: String) async throws -> Quote { throw error }
+    func fetchQuotes(symbols: [String]) async throws -> [Quote] { throw error }
 }
 
 // MARK: - Test doubles

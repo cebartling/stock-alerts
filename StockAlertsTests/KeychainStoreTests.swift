@@ -57,4 +57,65 @@ struct KeychainStoreTests {
         store.write("")
         #expect(store.read() == "")
     }
+
+    @Test
+    func differentServices_doNotInterfere() {
+        let tag = UUID().uuidString
+        let a = KeychainStore(service: "com.pintailconsultingllc.StockAlertsTests.A.\(tag)")
+        let b = KeychainStore(service: "com.pintailconsultingllc.StockAlertsTests.B.\(tag)")
+        defer { a.delete(); b.delete() }
+
+        a.write("alpha")
+        b.write("beta")
+
+        #expect(a.read() == "alpha")
+        #expect(b.read() == "beta")
+    }
+
+    @Test
+    func differentAccountsUnderSameService_doNotInterfere() {
+        let service = "com.pintailconsultingllc.StockAlertsTests.acct.\(UUID().uuidString)"
+        let first = KeychainStore(service: service, account: "first")
+        let second = KeychainStore(service: service, account: "second")
+        defer { first.delete(); second.delete() }
+
+        first.write("A")
+        second.write("B")
+
+        #expect(first.read() == "A")
+        #expect(second.read() == "B")
+    }
+
+    @Test
+    func unicodeValues_roundTrip() {
+        let store = makeStore()
+        defer { store.delete() }
+        let value = "key-🔑-日本語-\u{1F4A9}"
+        store.write(value)
+        #expect(store.read() == value)
+    }
+
+    @Test
+    func longValue_roundTrips() {
+        let store = makeStore()
+        defer { store.delete() }
+        let value = String(repeating: "x", count: 4096)
+        store.write(value)
+        #expect(store.read() == value)
+    }
+
+    @Test
+    func deleteDoesNotAffectOtherServices() {
+        let tag = UUID().uuidString
+        let keep = KeychainStore(service: "com.pintailconsultingllc.StockAlertsTests.keep.\(tag)")
+        let drop = KeychainStore(service: "com.pintailconsultingllc.StockAlertsTests.drop.\(tag)")
+        defer { keep.delete(); drop.delete() }
+
+        keep.write("kept")
+        drop.write("dropped")
+        drop.delete()
+
+        #expect(keep.read() == "kept")
+        #expect(drop.read() == "")
+    }
 }
