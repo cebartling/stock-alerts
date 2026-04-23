@@ -15,10 +15,7 @@ struct WatchlistView: View {
             HStack {
                 Text("Watchlist").font(.headline)
                 Spacer()
-                Button {
-                    NSApp.activate(ignoringOtherApps: true)
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                } label: {
+                SettingsLink {
                     Image(systemName: "gearshape")
                 }
                 .buttonStyle(.borderless)
