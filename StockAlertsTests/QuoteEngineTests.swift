@@ -265,6 +265,33 @@ struct QuoteEngineTests {
     }
 
     @Test
+    func tick_successAfterError_clearsLastError() async {
+        let watchlist = WatchlistStore(context: context)
+        watchlist.add("AAPL")
+        let alertStore = AlertStore(context: context)
+        let scheduler = FakeNotificationScheduler()
+        let service = ToggleableQuoteService(initialResult: .failure(.rateLimited))
+        let engine = QuoteEngine(
+            service: service,
+            alertStore: alertStore,
+            watchlistStore: watchlist,
+            notifications: scheduler,
+            isMarketOpen: { true }
+        )
+
+        // First tick fails — lastError is set.
+        await engine.tick()
+        #expect(engine.lastError != nil)
+
+        // Flip the service to return a valid quote and tick again.
+        await service.setResult(.success([makeQuote("AAPL", price: 100)]))
+        await engine.tick()
+
+        #expect(engine.lastError == nil)
+        #expect(engine.quotes["AAPL"]?.price == 100)
+    }
+
+    @Test
     func tick_populatesQuoteCacheEvenWhenNoAlertMatches() async {
         let watchlist = WatchlistStore(context: context)
         watchlist.add("AAPL")
@@ -287,6 +314,35 @@ actor GenericThrowingQuoteService: QuoteService {
     init(error: Error) { self.error = error }
     func fetchQuote(symbol: String) async throws -> Quote { throw error }
     func fetchQuotes(symbols: [String]) async throws -> [Quote] { throw error }
+}
+
+// Lets a test flip between success and failure across ticks.
+actor ToggleableQuoteService: QuoteService {
+    private var result: Result<[Quote], QuoteServiceError>
+
+    init(initialResult: Result<[Quote], QuoteServiceError>) {
+        self.result = initialResult
+    }
+
+    func setResult(_ newResult: Result<[Quote], QuoteServiceError>) {
+        result = newResult
+    }
+
+    func fetchQuote(symbol: String) async throws -> Quote {
+        switch result {
+        case .success(let quotes):
+            if let q = quotes.first(where: { $0.symbol == symbol }) { return q }
+            throw QuoteServiceError.invalidSymbol(symbol)
+        case .failure(let err): throw err
+        }
+    }
+
+    func fetchQuotes(symbols: [String]) async throws -> [Quote] {
+        switch result {
+        case .success(let quotes): return quotes
+        case .failure(let err): throw err
+        }
+    }
 }
 
 // MARK: - Test doubles

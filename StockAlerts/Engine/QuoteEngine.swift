@@ -50,6 +50,7 @@ final class QuoteEngine: ObservableObject {
         do {
             let fetched = try await service.fetchQuotes(symbols: symbols)
             for quote in fetched { quotes[quote.symbol] = quote }
+            lastError = nil
             await evaluateAlerts(quotes: fetched)
         } catch let error as QuoteServiceError {
             lastError = error
