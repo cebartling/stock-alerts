@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "stock_alerts",
+  "project_id": "63018dd2-0dcb-4559-a8d9-7c2249fef0d4"
+}
