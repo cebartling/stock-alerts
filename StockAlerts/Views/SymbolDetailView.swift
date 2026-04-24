@@ -40,6 +40,16 @@ struct SymbolDetailView: View {
             .padding(24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    StocksAppLauncher.shared.open(symbol: symbol)
+                } label: {
+                    Label("Open in Stocks", systemImage: "arrow.up.right.square")
+                }
+                .help("Open \(symbol.uppercased()) in Apple's Stocks app")
+            }
+        }
     }
 
     // MARK: - sections
