@@ -59,7 +59,15 @@ struct MainWindowView: View {
                 Button("Add", action: addSymbol)
                     .disabled(newSymbol.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .padding(10)
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+
+            HStack {
+                LastUpdatedLabel(date: engine.lastSuccessfulFetch)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
         }
     }
 
