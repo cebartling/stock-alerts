@@ -105,6 +105,35 @@ struct KeychainStoreTests {
     }
 
     @Test
+    func writes_doNotPolluteLoginKeychainFile() throws {
+        let store = makeStore()
+        defer { store.delete() }
+        store.write("secret-payload")
+
+        // Shell out to /usr/bin/security, which operates on on-disk keychain
+        // files directly and therefore can tell DPK items apart from
+        // login.keychain-db items (the entitled in-process SecItem* API
+        // unifies the two). find-generic-password exits non-zero if not found.
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        task.arguments = [
+            "find-generic-password",
+            "-s", store.service,
+            NSString(string: "~/Library/Keychains/login.keychain-db").expandingTildeInPath,
+        ]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+        try task.run()
+        task.waitUntilExit()
+
+        #expect(
+            task.terminationStatus != 0,
+            "Item with service \(store.service) must NOT be in login.keychain-db; security exit=\(task.terminationStatus)"
+        )
+    }
+
+    @Test
     func deleteDoesNotAffectOtherServices() {
         let tag = UUID().uuidString
         let keep = KeychainStore(service: "com.pintailconsultingllc.StockAlertsTests.keep.\(tag)")

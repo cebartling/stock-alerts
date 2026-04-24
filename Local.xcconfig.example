@@ -1,0 +1,12 @@
+// Copy this file to Local.xcconfig (gitignored) and fill in your Apple
+// Developer Team ID before running `xcodegen generate`. The StockAlerts
+// target needs a real development certificate to sign the
+// keychain-access-groups entitlement used by the Data Protection Keychain.
+//
+// Find your Team ID in Xcode:
+//   Target "StockAlerts" → Build Settings → search "DEVELOPMENT_TEAM"
+// or:
+//   security find-identity -v -p codesigning   (in Terminal)
+// The 10-char value in the parentheses after your name is the Team ID.
+
+DEVELOPMENT_TEAM = YOUR_TEAM_ID_HERE

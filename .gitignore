@@ -11,6 +11,9 @@ xcuserdata/
 ## XcodeGen-generated project (regenerated from project.yml)
 StockAlerts.xcodeproj/
 
+## Developer-local signing config — see Local.xcconfig.example
+Local.xcconfig
+
 ## Obj-C/Swift specific
 *.hmap
 

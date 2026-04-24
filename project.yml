@@ -7,11 +7,14 @@ options:
   generateEmptyDirectories: true
   groupSortPosition: top
 
+configFiles:
+  Debug: Local.xcconfig
+  Release: Local.xcconfig
+
 settings:
   base:
     SWIFT_VERSION: "5.10"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
-    DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
@@ -38,6 +41,8 @@ targets:
       properties:
         com.apple.security.app-sandbox: YES
         com.apple.security.network.client: YES
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.pintailconsultingllc.StockAlerts
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.pintailconsultingllc.StockAlerts
