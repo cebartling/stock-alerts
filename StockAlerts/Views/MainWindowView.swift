@@ -39,6 +39,11 @@ struct MainWindowView: View {
                     ForEach(symbols) { item in
                         sidebarRow(item)
                             .tag(item.symbol)
+                            .contextMenu {
+                                Button("Open in Stocks") {
+                                    StocksAppLauncher.shared.open(symbol: item.symbol)
+                                }
+                            }
                     }
                     .onDelete { offsets in
                         for index in offsets {
