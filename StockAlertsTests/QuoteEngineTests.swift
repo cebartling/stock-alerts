@@ -27,7 +27,8 @@ struct QuoteEngineTests {
 
     private func makeEngine(
         quotes: Result<[Quote], QuoteServiceError> = .success([]),
-        isMarketOpen: @escaping @Sendable () -> Bool = { true }
+        isMarketOpen: @escaping @Sendable () -> Bool = { true },
+        now: @escaping @Sendable () -> Date = { Date() }
     ) -> (engine: QuoteEngine, scheduler: FakeNotificationScheduler, service: FakeQuoteService) {
         let service = FakeQuoteService(result: quotes)
         let scheduler = FakeNotificationScheduler()
@@ -38,7 +39,8 @@ struct QuoteEngineTests {
             alertStore: alertStore,
             watchlistStore: watchlistStore,
             notifications: scheduler,
-            isMarketOpen: isMarketOpen
+            isMarketOpen: isMarketOpen,
+            now: now
         )
         return (engine, scheduler, service)
     }
@@ -289,6 +291,89 @@ struct QuoteEngineTests {
 
         #expect(engine.lastError == nil)
         #expect(engine.quotes["AAPL"]?.price == 100)
+    }
+
+    // MARK: - lastSuccessfulFetch timestamp
+
+    @Test
+    func lastSuccessfulFetch_isNil_beforeFirstTick() {
+        let (engine, _, _) = makeEngine()
+        #expect(engine.lastSuccessfulFetch == nil)
+    }
+
+    @Test
+    func tick_setsLastSuccessfulFetch_onSuccess() async {
+        let watchlist = WatchlistStore(context: context)
+        watchlist.add("AAPL")
+        let fixed = Date(timeIntervalSince1970: 1_700_000_000)
+        let (engine, _, _) = makeEngine(
+            quotes: .success([makeQuote("AAPL", price: 100)]),
+            now: { fixed }
+        )
+
+        await engine.tick()
+
+        #expect(engine.lastSuccessfulFetch == fixed)
+    }
+
+    @Test
+    func tick_preservesLastSuccessfulFetch_acrossErrorAfterSuccess() async {
+        let watchlist = WatchlistStore(context: context)
+        watchlist.add("AAPL")
+        let alertStore = AlertStore(context: context)
+        let scheduler = FakeNotificationScheduler()
+        let service = ToggleableQuoteService(
+            initialResult: .success([makeQuote("AAPL", price: 100)])
+        )
+        let firstSuccess = Date(timeIntervalSince1970: 1_700_000_000)
+        var nowValue = firstSuccess
+        let engine = QuoteEngine(
+            service: service,
+            alertStore: alertStore,
+            watchlistStore: watchlist,
+            notifications: scheduler,
+            isMarketOpen: { true },
+            now: { nowValue }
+        )
+
+        await engine.tick()
+        #expect(engine.lastSuccessfulFetch == firstSuccess)
+
+        // Move clock forward and have the next tick fail; timestamp must NOT regress or clear.
+        nowValue = firstSuccess.addingTimeInterval(60)
+        await service.setResult(.failure(.rateLimited))
+        await engine.tick()
+
+        #expect(engine.lastError != nil)
+        #expect(engine.lastSuccessfulFetch == firstSuccess)
+    }
+
+    @Test
+    func tick_outsideMarketHours_doesNotSetLastSuccessfulFetch() async {
+        let watchlist = WatchlistStore(context: context)
+        watchlist.add("AAPL")
+        let (engine, _, _) = makeEngine(
+            quotes: .success([makeQuote("AAPL", price: 100)]),
+            isMarketOpen: { false },
+            now: { Date(timeIntervalSince1970: 1_700_000_000) }
+        )
+
+        await engine.tick()
+
+        #expect(engine.lastSuccessfulFetch == nil)
+    }
+
+    @Test
+    func tick_emptyWatchlist_doesNotSetLastSuccessfulFetch() async {
+        // No symbols added — service is never called, so a fetch did not actually happen.
+        let (engine, _, _) = makeEngine(
+            quotes: .success([]),
+            now: { Date(timeIntervalSince1970: 1_700_000_000) }
+        )
+
+        await engine.tick()
+
+        #expect(engine.lastSuccessfulFetch == nil)
     }
 
     @Test

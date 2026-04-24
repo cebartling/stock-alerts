@@ -48,8 +48,12 @@ struct MenuBarPopoverView: View {
             }
 
             Divider()
-            Button("Quit Stock Alerts") { NSApp.terminate(nil) }
-                .buttonStyle(.borderless)
+            HStack {
+                LastUpdatedLabel(date: engine.lastSuccessfulFetch)
+                Spacer()
+                Button("Quit Stock Alerts") { NSApp.terminate(nil) }
+                    .buttonStyle(.borderless)
+            }
         }
         .padding(12)
         .frame(width: 280)

@@ -5,12 +5,14 @@ import SwiftUI
 final class QuoteEngine: ObservableObject {
     @Published private(set) var quotes: [String: Quote] = [:]
     @Published private(set) var lastError: QuoteServiceError?
+    @Published private(set) var lastSuccessfulFetch: Date?
 
     private let service: QuoteService
     private let alertStore: AlertStore
     private let watchlistStore: WatchlistStore
     private let notifications: NotificationScheduler
     private let isMarketOpen: @Sendable () -> Bool
+    private let now: @Sendable () -> Date
     private var pollTask: Task<Void, Never>?
 
     var pollInterval: TimeInterval = 30
@@ -20,13 +22,15 @@ final class QuoteEngine: ObservableObject {
         alertStore: AlertStore,
         watchlistStore: WatchlistStore,
         notifications: NotificationScheduler = UNUserNotificationScheduler(),
-        isMarketOpen: @escaping @Sendable () -> Bool = { MarketClock.isOpen(at: .now) }
+        isMarketOpen: @escaping @Sendable () -> Bool = { MarketClock.isOpen(at: .now) },
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.service = service
         self.alertStore = alertStore
         self.watchlistStore = watchlistStore
         self.notifications = notifications
         self.isMarketOpen = isMarketOpen
+        self.now = now
     }
 
     func start() {
@@ -51,6 +55,7 @@ final class QuoteEngine: ObservableObject {
             let fetched = try await service.fetchQuotes(symbols: symbols)
             for quote in fetched { quotes[quote.symbol] = quote }
             lastError = nil
+            lastSuccessfulFetch = now()
             await evaluateAlerts(quotes: fetched)
         } catch let error as QuoteServiceError {
             lastError = error
