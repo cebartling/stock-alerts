@@ -13,6 +13,9 @@ struct PriceAlertTests {
             symbol: symbol,
             price: price,
             previousClose: previousClose,
+            open: price,
+            high: price,
+            low: price,
             timestamp: Date(timeIntervalSince1970: 1_700_000_000)
         )
     }

@@ -55,7 +55,7 @@ struct SymbolDetailView: View {
     // MARK: - sections
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(symbol.uppercased())
                 .font(.system(size: 36, weight: .semibold))
             if let q = quote {
@@ -68,14 +68,29 @@ struct SymbolDetailView: View {
                         .foregroundStyle(q.changePercent >= 0 ? .green : .red)
                         .monospacedDigit()
                 }
-                Text("Previous close: \(String(format: "%.2f", q.previousClose))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(alignment: .top, spacing: 16) {
+                    stat(label: "Open", value: q.open)
+                    stat(label: "High", value: q.high)
+                    stat(label: "Low", value: q.low)
+                    stat(label: "Prev Close", value: q.previousClose)
+                }
             } else {
                 Text("Waiting for quote…")
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func stat(label: String, value: Double) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(String(format: "%.2f", value))
+                .font(.callout)
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var alertsSection: some View {

@@ -9,6 +9,9 @@ struct QuoteTests {
             symbol: "AAPL",
             price: price,
             previousClose: prevClose,
+            open: price,
+            high: price,
+            low: price,
             timestamp: Date(timeIntervalSince1970: 1_700_000_000)
         )
     }
@@ -58,18 +61,21 @@ struct QuoteTests {
     @Test
     func equality_matchesOnAllFields() {
         let t = Date(timeIntervalSince1970: 1_700_000_000)
-        let a = Quote(symbol: "AAPL", price: 100, previousClose: 99, timestamp: t)
-        let b = Quote(symbol: "AAPL", price: 100, previousClose: 99, timestamp: t)
+        let a = Quote(symbol: "AAPL", price: 100, previousClose: 99, open: 99.5, high: 101, low: 98.5, timestamp: t)
+        let b = Quote(symbol: "AAPL", price: 100, previousClose: 99, open: 99.5, high: 101, low: 98.5, timestamp: t)
         #expect(a == b)
     }
 
     @Test
     func equality_differsWhenAnyFieldDiffers() {
         let t = Date(timeIntervalSince1970: 1_700_000_000)
-        let base = Quote(symbol: "AAPL", price: 100, previousClose: 99, timestamp: t)
-        #expect(base != Quote(symbol: "MSFT", price: 100, previousClose: 99, timestamp: t))
-        #expect(base != Quote(symbol: "AAPL", price: 101, previousClose: 99, timestamp: t))
-        #expect(base != Quote(symbol: "AAPL", price: 100, previousClose: 98, timestamp: t))
-        #expect(base != Quote(symbol: "AAPL", price: 100, previousClose: 99, timestamp: t.addingTimeInterval(1)))
+        let base = Quote(symbol: "AAPL", price: 100, previousClose: 99, open: 99.5, high: 101, low: 98.5, timestamp: t)
+        #expect(base != Quote(symbol: "MSFT", price: 100, previousClose: 99, open: 99.5, high: 101, low: 98.5, timestamp: t))
+        #expect(base != Quote(symbol: "AAPL", price: 101, previousClose: 99, open: 99.5, high: 101, low: 98.5, timestamp: t))
+        #expect(base != Quote(symbol: "AAPL", price: 100, previousClose: 98, open: 99.5, high: 101, low: 98.5, timestamp: t))
+        #expect(base != Quote(symbol: "AAPL", price: 100, previousClose: 99, open: 99.6, high: 101, low: 98.5, timestamp: t))
+        #expect(base != Quote(symbol: "AAPL", price: 100, previousClose: 99, open: 99.5, high: 101.1, low: 98.5, timestamp: t))
+        #expect(base != Quote(symbol: "AAPL", price: 100, previousClose: 99, open: 99.5, high: 101, low: 98.4, timestamp: t))
+        #expect(base != Quote(symbol: "AAPL", price: 100, previousClose: 99, open: 99.5, high: 101, low: 98.5, timestamp: t.addingTimeInterval(1)))
     }
 }

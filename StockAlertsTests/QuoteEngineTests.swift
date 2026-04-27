@@ -21,6 +21,9 @@ struct QuoteEngineTests {
             symbol: symbol,
             price: price,
             previousClose: prevClose,
+            open: price,
+            high: price,
+            low: price,
             timestamp: Date(timeIntervalSince1970: 1_700_000_000)
         )
     }

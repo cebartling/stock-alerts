@@ -23,7 +23,14 @@ struct FinnhubQuoteServiceTests {
     func fetchQuote_returnsParsedQuote() async throws {
         StubURLProtocol.requestHandler = { request in
             let data = try JSONSerialization.data(
-                withJSONObject: ["c": 123.45, "pc": 120.00, "t": 1_700_000_000]
+                withJSONObject: [
+                    "c": 123.45,
+                    "pc": 120.00,
+                    "o": 121.00,
+                    "h": 124.00,
+                    "l": 119.50,
+                    "t": 1_700_000_000,
+                ]
             )
             return (self.http(request.url!, 200), data)
         }
@@ -35,6 +42,9 @@ struct FinnhubQuoteServiceTests {
         #expect(quote.symbol == "AAPL")
         #expect(quote.price == 123.45)
         #expect(quote.previousClose == 120.00)
+        #expect(quote.open == 121.00)
+        #expect(quote.high == 124.00)
+        #expect(quote.low == 119.50)
         #expect(quote.timestamp == Date(timeIntervalSince1970: 1_700_000_000))
     }
 
@@ -44,7 +54,7 @@ struct FinnhubQuoteServiceTests {
         StubURLProtocol.requestHandler = { request in
             capturedURL = request.url
             let data = try JSONSerialization.data(
-                withJSONObject: ["c": 1.0, "pc": 1.0, "t": 1_700_000_000]
+                withJSONObject: ["c": 1.0, "pc": 1.0, "o": 1.0, "h": 1.0, "l": 1.0, "t": 1_700_000_000]
             )
             return (self.http(request.url!, 200), data)
         }
@@ -93,7 +103,7 @@ struct FinnhubQuoteServiceTests {
     func fetchQuote_zeroCurrentPrice_throwsInvalidSymbol() async {
         StubURLProtocol.requestHandler = { request in
             let data = try JSONSerialization.data(
-                withJSONObject: ["c": 0, "pc": 0, "t": 0]
+                withJSONObject: ["c": 0, "pc": 0, "o": 0, "h": 0, "l": 0, "t": 0]
             )
             return (self.http(request.url!, 200), data)
         }
@@ -147,7 +157,14 @@ struct FinnhubQuoteServiceTests {
                 .queryItems?.first(where: { $0.name == "symbol" })?.value ?? "?"
             let price: Double = sym == "AAPL" ? 100 : sym == "MSFT" ? 200 : 300
             let data = try JSONSerialization.data(
-                withJSONObject: ["c": price, "pc": price - 1, "t": 1_700_000_000]
+                withJSONObject: [
+                    "c": price,
+                    "pc": price - 1,
+                    "o": price,
+                    "h": price,
+                    "l": price,
+                    "t": 1_700_000_000,
+                ]
             )
             return (self.http(request.url!, 200), data)
         }
@@ -170,7 +187,7 @@ struct FinnhubQuoteServiceTests {
         StubURLProtocol.requestHandler = { request in
             callCount += 1
             let data = try JSONSerialization.data(
-                withJSONObject: ["c": 1.0, "pc": 1.0, "t": 0]
+                withJSONObject: ["c": 1.0, "pc": 1.0, "o": 1.0, "h": 1.0, "l": 1.0, "t": 0]
             )
             return (self.http(request.url!, 200), data)
         }
@@ -193,7 +210,14 @@ struct FinnhubQuoteServiceTests {
                 return (self.http(request.url!, 429), Data())
             }
             let data = try JSONSerialization.data(
-                withJSONObject: ["c": 100.0, "pc": 99.0, "t": 1_700_000_000]
+                withJSONObject: [
+                    "c": 100.0,
+                    "pc": 99.0,
+                    "o": 100.0,
+                    "h": 100.0,
+                    "l": 100.0,
+                    "t": 1_700_000_000,
+                ]
             )
             return (self.http(request.url!, 200), data)
         }
@@ -221,7 +245,7 @@ struct FinnhubQuoteServiceTests {
         StubURLProtocol.requestHandler = { request in
             capturedURL = request.url
             let data = try JSONSerialization.data(
-                withJSONObject: ["c": 1.0, "pc": 1.0, "t": 0]
+                withJSONObject: ["c": 1.0, "pc": 1.0, "o": 1.0, "h": 1.0, "l": 1.0, "t": 0]
             )
             return (self.http(request.url!, 200), data)
         }

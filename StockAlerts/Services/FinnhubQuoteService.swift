@@ -30,6 +30,9 @@ actor FinnhubQuoteService: QuoteService {
         struct Payload: Decodable {
             let c: Double   // current
             let pc: Double  // previous close
+            let o: Double   // day open
+            let h: Double   // day high
+            let l: Double   // day low
             let t: TimeInterval
         }
 
@@ -46,6 +49,9 @@ actor FinnhubQuoteService: QuoteService {
             symbol: symbol,
             price: payload.c,
             previousClose: payload.pc,
+            open: payload.o,
+            high: payload.h,
+            low: payload.l,
             timestamp: Date(timeIntervalSince1970: payload.t)
         )
     }
