@@ -18,7 +18,7 @@ struct MainWindowView: View {
         }
         .navigationTitle("Stock Alerts")
         .toolbar {
-            ToolbarItem(placement: .principal) {
+            ToolbarItem {
                 MarketStatusBadge(style: .full)
             }
             ToolbarItem {
