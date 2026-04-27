@@ -3,8 +3,8 @@ import UserNotifications
 
 struct SettingsView: View {
     @EnvironmentObject private var engine: QuoteEngine
-    @AppStorage("pollIntervalSeconds") private var pollIntervalSeconds: Int = 30
-    @AppStorage("extendedHours") private var extendedHours: Bool = false
+    @AppStorage(DefaultsKey.pollIntervalSeconds) private var pollIntervalSeconds: Int = 30
+    @AppStorage(DefaultsKey.extendedHours) private var extendedHours: Bool = false
 
     @State private var apiKey: String = Secrets.finnhubKey
     @State private var notifStatus: UNAuthorizationStatus = .notDetermined

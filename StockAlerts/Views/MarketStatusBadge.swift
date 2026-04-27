@@ -16,7 +16,7 @@ struct MarketStatusBadge: View {
 
     let style: Style
 
-    @AppStorage("extendedHours") private var extendedHours: Bool = false
+    @AppStorage(DefaultsKey.extendedHours) private var extendedHours: Bool = false
 
     var body: some View {
         switch style {

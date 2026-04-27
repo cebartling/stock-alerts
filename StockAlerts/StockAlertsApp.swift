@@ -24,12 +24,12 @@ struct StockAlertsApp: App {
             alertStore: alertStore,
             watchlistStore: watchlistStore,
             isMarketOpen: {
-                let extended = UserDefaults.standard.bool(forKey: "extendedHours")
+                let extended = UserDefaults.standard.bool(forKey: DefaultsKey.extendedHours)
                 return MarketClock.isOpen(at: .now, extended: extended)
             }
         )
         engine.pollInterval = TimeInterval(
-            max(10, UserDefaults.standard.integer(forKey: "pollIntervalSeconds"))
+            max(10, UserDefaults.standard.integer(forKey: DefaultsKey.pollIntervalSeconds))
         )
         _engine = StateObject(wrappedValue: engine)
     }
