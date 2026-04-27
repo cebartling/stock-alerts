@@ -1,8 +1,10 @@
 import SwiftUI
 
-enum MarketStatusFormatter {
-    static func text(isOpen: Bool) -> String {
-        isOpen ? "Market Open" : "Market Closed"
+enum MarketStatusViewModel {
+    static func make(now: Date, extended: Bool) -> (isOpen: Bool, label: String) {
+        let isOpen = MarketClock.isOpen(at: now, extended: extended)
+        let label = isOpen ? "Market Open" : "Market Closed"
+        return (isOpen, label)
     }
 }
 
@@ -24,36 +26,39 @@ struct MarketStatusBadge: View {
         switch style {
         case .full:
             TimelineView(.periodic(from: Date(), by: 30)) { context in
-                content(isOpen: MarketClock.isOpen(at: context.date, extended: extendedHours))
+                let model = MarketStatusViewModel.make(now: context.date, extended: extendedHours)
+                content(model: model)
             }
         case .compact:
             // TimelineView inside MenuBarExtra's label freezes the SwiftUI
-            // runtime (kills xctest's runner-connect handshake). The status-bar
-            // label re-renders on every QuoteEngine poll, so a static read here
-            // gives the same effective cadence without TimelineView.
-            content(isOpen: MarketClock.isOpen(at: Date(), extended: extendedHours))
+            // runtime (kills xctest's runner-connect handshake). MenuBarLabel
+            // observes QuoteEngine.clockTick (a 60s heartbeat published
+            // unconditionally), so the dot still updates at the open/close
+            // boundary without TimelineView.
+            let model = MarketStatusViewModel.make(now: Date(), extended: extendedHours)
+            content(model: model)
         }
     }
 
     @ViewBuilder
-    private func content(isOpen: Bool) -> some View {
+    private func content(model: (isOpen: Bool, label: String)) -> some View {
         switch style {
         case .full:
             HStack(spacing: 6) {
-                dot(isOpen: isOpen)
-                Text(MarketStatusFormatter.text(isOpen: isOpen))
+                dot(isOpen: model.isOpen)
+                Text(model.label)
                     .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundStyle(isOpen ? .primary : .secondary)
+                    .foregroundStyle(model.isOpen ? .primary : .secondary)
             }
             .padding(.leading, 6)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(MarketStatusFormatter.text(isOpen: isOpen))
+            .accessibilityLabel(model.label)
         case .compact:
-            dot(isOpen: isOpen)
+            dot(isOpen: model.isOpen)
                 .accessibilityElement()
                 .accessibilityAddTraits(.isStaticText)
-                .accessibilityLabel(MarketStatusFormatter.text(isOpen: isOpen))
+                .accessibilityLabel(model.label)
         }
     }
 
