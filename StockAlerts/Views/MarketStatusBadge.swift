@@ -18,10 +18,6 @@ struct MarketStatusBadge: View {
 
     @AppStorage("extendedHours") private var extendedHours: Bool = false
 
-    init(style: Style = .full) {
-        self.style = style
-    }
-
     var body: some View {
         switch style {
         case .full:
