@@ -51,13 +51,26 @@ struct MarketStatusBadge: View {
             .accessibilityLabel(MarketStatusFormatter.text(isOpen: isOpen))
         case .compact:
             dot(isOpen: isOpen)
+                .accessibilityElement()
+                .accessibilityAddTraits(.isStaticText)
                 .accessibilityLabel(MarketStatusFormatter.text(isOpen: isOpen))
         }
     }
 
+    @ViewBuilder
     private func dot(isOpen: Bool) -> some View {
-        Circle()
-            .fill(isOpen ? Color.green : Color.secondary)
-            .frame(width: 8, height: 8)
+        // Open: filled green disc. Closed: hollow gray ring. The shape
+        // difference carries the open/closed cue independent of color so the
+        // signal isn't lost for color-blind users (the .full style also has
+        // text; the .compact menu-bar dot is shape-only).
+        if isOpen {
+            Circle()
+                .fill(Color.green)
+                .frame(width: 8, height: 8)
+        } else {
+            Circle()
+                .strokeBorder(Color.secondary, lineWidth: 1.5)
+                .frame(width: 8, height: 8)
+        }
     }
 }
