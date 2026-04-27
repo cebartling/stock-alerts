@@ -389,6 +389,38 @@ struct QuoteEngineTests {
         #expect(engine.quotes["AAPL"]?.price == 150)
         #expect(scheduler.scheduled.isEmpty)
     }
+
+    // MARK: - clockTick (UI re-render heartbeat)
+
+    @Test
+    func clockTick_initializedFromNowClosure() {
+        let fixed = Date(timeIntervalSince1970: 1_800_000_000)
+        let (engine, _, _) = makeEngine(now: { fixed })
+        #expect(engine.clockTick == fixed)
+    }
+
+    @Test
+    func tickClock_advancesClockTickToCurrentNow() {
+        var nowValue = Date(timeIntervalSince1970: 1_800_000_000)
+        let (engine, _, _) = makeEngine(now: { nowValue })
+        nowValue = Date(timeIntervalSince1970: 1_800_000_060)
+        engine.tickClock()
+        #expect(engine.clockTick == Date(timeIntervalSince1970: 1_800_000_060))
+    }
+
+    @Test
+    func tickClock_runsRegardlessOfMarketHours() {
+        // The whole point: this heartbeat must fire even when the market is
+        // closed, so views like MenuBarLabel re-render at the open boundary.
+        var nowValue = Date(timeIntervalSince1970: 1_800_000_000)
+        let (engine, _, _) = makeEngine(
+            isMarketOpen: { false },
+            now: { nowValue }
+        )
+        nowValue = Date(timeIntervalSince1970: 1_800_000_060)
+        engine.tickClock()
+        #expect(engine.clockTick == Date(timeIntervalSince1970: 1_800_000_060))
+    }
 }
 
 // Secondary fake used only by the non-QuoteServiceError test. The main

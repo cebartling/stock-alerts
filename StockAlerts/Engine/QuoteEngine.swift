@@ -6,6 +6,10 @@ final class QuoteEngine: ObservableObject {
     @Published private(set) var quotes: [String: Quote] = [:]
     @Published private(set) var lastError: QuoteServiceError?
     @Published private(set) var lastSuccessfulFetch: Date?
+    // Wall-clock heartbeat: published unconditionally on `clockInterval` so
+    // views that depend on time (e.g. the menu-bar Market Open/Closed dot)
+    // re-render at session boundaries even when tick() is gated off.
+    @Published private(set) var clockTick: Date
 
     private let service: QuoteService
     private let alertStore: AlertStore
@@ -14,8 +18,10 @@ final class QuoteEngine: ObservableObject {
     private let isMarketOpen: @Sendable () -> Bool
     private let now: @Sendable () -> Date
     private var pollTask: Task<Void, Never>?
+    private var clockTask: Task<Void, Never>?
 
     var pollInterval: TimeInterval = 30
+    var clockInterval: TimeInterval = 60
 
     init(
         service: QuoteService,
@@ -31,6 +37,7 @@ final class QuoteEngine: ObservableObject {
         self.notifications = notifications
         self.isMarketOpen = isMarketOpen
         self.now = now
+        self.clockTick = now()
     }
 
     func start() {
@@ -42,9 +49,25 @@ final class QuoteEngine: ObservableObject {
                 try? await Task.sleep(for: .seconds(interval))
             }
         }
+
+        clockTask?.cancel()
+        clockTask = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.tickClock()
+                let interval = self?.clockInterval ?? 60
+                try? await Task.sleep(for: .seconds(interval))
+            }
+        }
     }
 
-    func stop() { pollTask?.cancel() }
+    func stop() {
+        pollTask?.cancel()
+        clockTask?.cancel()
+    }
+
+    func tickClock() {
+        clockTick = now()
+    }
 
     func tick() async {
         guard isMarketOpen() else { return }
