@@ -44,7 +44,6 @@ struct MarketStatusBadge: View {
                 .fontWeight(.medium)
                 .foregroundStyle(model.isOpen ? .primary : .secondary)
         }
-        .padding(.leading, 6)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(model.label)
     }

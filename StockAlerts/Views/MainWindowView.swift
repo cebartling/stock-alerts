@@ -19,7 +19,12 @@ struct MainWindowView: View {
         .navigationTitle("Stock Alerts")
         .toolbar {
             ToolbarItem {
+                // 6pt leading padding gives the dot breathing room from the
+                // toolbar group's left edge (macOS Tahoe groups consecutive
+                // toolbar items into one glass capsule); the badge itself is
+                // chrome-free and used unpadded everywhere else.
                 MarketStatusBadge(style: .full)
+                    .padding(.leading, 6)
             }
             ToolbarItem {
                 Button {
