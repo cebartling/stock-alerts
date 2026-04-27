@@ -27,7 +27,7 @@ struct MarketStatusBadge: View {
         case .full:
             TimelineView(.periodic(from: Date(), by: 30)) { context in
                 let model = MarketStatusViewModel.make(now: context.date, extended: extendedHours)
-                content(model: model)
+                fullBody(model: model)
             }
         case .compact:
             // TimelineView inside MenuBarExtra's label freezes the SwiftUI
@@ -36,30 +36,28 @@ struct MarketStatusBadge: View {
             // unconditionally), so the dot still updates at the open/close
             // boundary without TimelineView.
             let model = MarketStatusViewModel.make(now: Date(), extended: extendedHours)
-            content(model: model)
+            compactBody(model: model)
         }
     }
 
-    @ViewBuilder
-    private func content(model: (isOpen: Bool, label: String)) -> some View {
-        switch style {
-        case .full:
-            HStack(spacing: 6) {
-                dot(isOpen: model.isOpen)
-                Text(model.label)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(model.isOpen ? .primary : .secondary)
-            }
-            .padding(.leading, 6)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(model.label)
-        case .compact:
+    private func fullBody(model: (isOpen: Bool, label: String)) -> some View {
+        HStack(spacing: 6) {
             dot(isOpen: model.isOpen)
-                .accessibilityElement()
-                .accessibilityAddTraits(.isStaticText)
-                .accessibilityLabel(model.label)
+            Text(model.label)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(model.isOpen ? .primary : .secondary)
         }
+        .padding(.leading, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(model.label)
+    }
+
+    private func compactBody(model: (isOpen: Bool, label: String)) -> some View {
+        dot(isOpen: model.isOpen)
+            .accessibilityElement()
+            .accessibilityAddTraits(.isStaticText)
+            .accessibilityLabel(model.label)
     }
 
     @ViewBuilder
