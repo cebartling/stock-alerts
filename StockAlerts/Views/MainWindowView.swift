@@ -18,6 +18,9 @@ struct MainWindowView: View {
         }
         .navigationTitle("Stock Alerts")
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                MarketStatusBadge(style: .full)
+            }
             ToolbarItem {
                 Button {
                     Task { await engine.tick() }

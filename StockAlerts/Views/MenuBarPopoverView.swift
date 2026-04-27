@@ -8,13 +8,16 @@ struct MenuBarPopoverView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Watchlist").font(.headline)
-                Spacer()
-                SettingsLink {
-                    Image(systemName: "gearshape")
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Watchlist").font(.headline)
+                    Spacer()
+                    SettingsLink {
+                        Image(systemName: "gearshape")
+                    }
+                    .buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
+                MarketStatusBadge(style: .full)
             }
 
             Button {
