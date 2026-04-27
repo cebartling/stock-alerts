@@ -95,6 +95,8 @@ struct SymbolDetailView: View {
                 .minimumScaleFactor(0.85)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label) \(String(format: "%.2f", value))")
     }
 
     private var alertsSection: some View {
