@@ -70,6 +70,7 @@ struct MainWindowView: View {
                 Spacer()
             }
             .padding(.horizontal, 10)
+            .padding(.top, 6)
             .padding(.bottom, 8)
         }
     }
