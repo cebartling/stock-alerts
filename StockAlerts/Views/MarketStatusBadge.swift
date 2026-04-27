@@ -46,6 +46,7 @@ struct MarketStatusBadge: View {
                     .fontWeight(.medium)
                     .foregroundStyle(isOpen ? .primary : .secondary)
             }
+            .padding(.leading, 6)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(MarketStatusFormatter.text(isOpen: isOpen))
         case .compact:
