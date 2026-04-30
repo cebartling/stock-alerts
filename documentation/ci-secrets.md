@@ -1,10 +1,16 @@
 # CI secrets
 
-The `test` job in `.github/workflows/ci.yml` signs the StockAlerts target with a real Apple Development certificate (the `keychain-access-groups` entitlement requires it — ad-hoc signing fails). To do that on a fresh GitHub-hosted `macos-latest` runner, the workflow imports a P12 cert + provisioning profile from repository secrets each run.
+The `test` job in `.github/workflows/ci.yml` signs the StockAlerts target with a real Apple Development certificate (the `keychain-access-groups` entitlement requires it — ad-hoc signing fails). To do that on a fresh GitHub-hosted `macos-latest` runner, the workflow imports a P12 cert + provisioning profile from **GitHub Actions Repository Secrets** each run.
 
-## Required repository secrets
+## Required Repository Secrets
 
-Configure under **Settings → Secrets and variables → Actions** on the GitHub repo:
+These are **Repository Secrets** (scoped to this single GitHub repo) — *not* Environment Secrets and *not* Organization Secrets. Configure on github.com at:
+
+**Repo → Settings → Secrets and variables → Actions → Secrets tab → "Repository secrets" section → "New repository secret"**
+
+Direct URL: `https://github.com/<owner>/<repo>/settings/secrets/actions`
+
+Add each of the following as a separate repository secret:
 
 | Secret | Contents |
 | --- | --- |
@@ -70,6 +76,7 @@ security find-identity -v -p codesigning
 
 ## Security notes
 
-- All five values are referenced as `${{ secrets.* }}`; nothing is committed to the repo.
+- All five values are stored as GitHub Actions Repository Secrets and referenced in the workflow as `${{ secrets.* }}`; nothing is committed to the repo.
+- Repository Secrets are not exposed to workflows triggered from forks of this repo, which keeps the signing material out of untrusted PR runs.
 - The runner-local keychain is destroyed in an `if: always()` cleanup step so a failed job still tears it down.
 - `Local.xcconfig` is regenerated from `DEVELOPMENT_TEAM` at job start and is gitignored — it never ends up in the build context outside the runner.
