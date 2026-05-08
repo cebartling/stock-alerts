@@ -57,7 +57,7 @@ jobs:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
-          PROFILE_PATH="$RUNNER_TEMP/build_pp.mobileprovision"
+          PROFILE_PATH="$RUNNER_TEMP/build_pp.provisionprofile"
           KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
 
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
@@ -70,8 +70,14 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
 
+          PROFILE_PLIST=$(security cms -D -i "$PROFILE_PATH")
+          PROFILE_UUID=$(echo "$PROFILE_PLIST" | plutil -extract UUID raw -o - -)
+          PROFILE_NAME=$(echo "$PROFILE_PLIST" | plutil -extract Name raw -o - -)
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"${PROFILE_UUID}.provisionprofile"
+
+          echo "Imported provisioning profile: $PROFILE_NAME ($PROFILE_UUID)"
+          echo "PROVISIONING_PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
 
       - name: Write Local.xcconfig
         env:
@@ -82,7 +88,15 @@ jobs:
         run: xcodegen generate
 
       - name: Run tests
-        run: ./scripts/test.sh -resultBundlePath build/StockAlerts.xcresult
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          ./scripts/test.sh \
+            -resultBundlePath build/StockAlerts.xcresult \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Development" \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_NAME"
 
       - name: Upload xcresult
         if: always()
