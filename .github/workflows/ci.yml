@@ -85,6 +85,32 @@ jobs:
           echo "Imported provisioning profile: $PROFILE_NAME ($PROFILE_UUID)"
           echo "PROVISIONING_PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
 
+      - name: Diagnose signing setup
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          PROFILE_PATH="$RUNNER_TEMP/build_pp.provisionprofile"
+          echo "=== Profile metadata ==="
+          # GitHub masks any value matching a secret. If the profile's team matches
+          # DEVELOPMENT_TEAM, both render as ***. If they differ, the mismatch is
+          # visible because only one is masked.
+          security cms -D -i "$PROFILE_PATH" | plutil -extract Name raw -o - -
+          security cms -D -i "$PROFILE_PATH" | plutil -extract UUID raw -o - -
+          echo "Profile TeamIdentifier:"
+          security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -o - -
+          echo "Profile application-identifier:"
+          security cms -D -i "$PROFILE_PATH" | plutil -extract Entitlements.application-identifier raw -o - -
+          echo "DEVELOPMENT_TEAM secret length: ${#DEVELOPMENT_TEAM} (expect 10)"
+
+          echo ""
+          echo "=== Profile directories ==="
+          ls -la "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/" 2>/dev/null || echo "(missing)"
+          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/" 2>/dev/null || echo "(missing)"
+
+          echo ""
+          echo "=== Codesigning identities ==="
+          security find-identity -v -p codesigning
+
       - name: Write Local.xcconfig
         env:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
