@@ -49,40 +49,32 @@ jobs:
           restore-keys: |
             spm-${{ runner.os }}-
 
-      - name: Import signing assets
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          BUILD_PROVISIONING_PROFILE_BASE64: ${{ secrets.BUILD_PROVISIONING_PROFILE_BASE64 }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
-          PROFILE_PATH="$RUNNER_TEMP/build_pp.mobileprovision"
-          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
-          echo -n "$BUILD_PROVISIONING_PROFILE_BASE64" | base64 --decode -o "$PROFILE_PATH"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
-
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
-
+      # CI runs unsigned. The macOS Development profile this app needs (for
+      # keychain-access-groups) is locked to specific device UDIDs that change
+      # every run on macos-latest. Instead of jumping through App Store Connect
+      # API hoops to register the runner each run, we disable signing here and
+      # skip the one suite that exercises keychain-access-groups
+      # (KeychainStoreTests). Local pre-push runs via scripts/test.sh still
+      # cover that suite end-to-end.
       - name: Write Local.xcconfig
-        env:
-          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
-        run: printf 'DEVELOPMENT_TEAM = %s\n' "$DEVELOPMENT_TEAM" > Local.xcconfig
+        run: printf 'DEVELOPMENT_TEAM =\n' > Local.xcconfig
 
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Run tests
-        run: ./scripts/test.sh -resultBundlePath build/StockAlerts.xcresult
+      - name: Run tests (unsigned, KeychainStoreTests skipped)
+        run: |
+          xcodebuild \
+            -project StockAlerts.xcodeproj \
+            -scheme StockAlerts \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -resultBundlePath build/StockAlerts.xcresult \
+            -skip-testing:StockAlertsTests/KeychainStoreTests \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            test
 
       - name: Upload xcresult
         if: always()
@@ -90,7 +82,3 @@ jobs:
         with:
           name: StockAlerts.xcresult
           path: build/StockAlerts.xcresult
-
-      - name: Cleanup keychain
-        if: always()
-        run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
