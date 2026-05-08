@@ -98,8 +98,8 @@ jobs:
           security cms -D -i "$PROFILE_PATH" | plutil -extract UUID raw -o - -
           echo "Profile TeamIdentifier:"
           security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -o - -
-          echo "Profile application-identifier:"
-          security cms -D -i "$PROFILE_PATH" | plutil -extract Entitlements.application-identifier raw -o - -
+          echo "Profile entitlements:"
+          security cms -D -i "$PROFILE_PATH" | plutil -extract Entitlements xml1 -o - - || true
           echo "DEVELOPMENT_TEAM secret length: ${#DEVELOPMENT_TEAM} (expect 10)"
 
           echo ""
