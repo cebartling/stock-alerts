@@ -54,6 +54,15 @@ The script wraps `xcodebuild test` with the flags this project always needs (`-a
 ./scripts/test.sh -only-testing:StockAlertsTests/KeychainStoreTests
 ```
 
+## CI
+
+Every PR against `main` and every push to `main` runs `.github/workflows/ci.yml`, which has two jobs:
+
+- **lint** — `swiftlint --strict` against `StockAlerts/` and `StockAlertsTests/`. Config: `.swiftlint.yml`.
+- **test** — generates the project, signs with an imported Apple Development cert, runs `./scripts/test.sh`, and uploads the `.xcresult` bundle as a workflow artifact.
+
+A green check is required before merging. The `test` job depends on five repository secrets — see [`documentation/ci-secrets.md`](documentation/ci-secrets.md) for the list and how to produce/rotate them.
+
 ## Repository layout
 
 - `project.yml` — XcodeGen source of truth for `StockAlerts.xcodeproj`

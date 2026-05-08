@@ -1,0 +1,21 @@
+included:
+  - StockAlerts
+  - StockAlertsTests
+excluded:
+  - StockAlerts.xcodeproj
+  - scripts
+disabled_rules:
+  - line_length
+  - todo
+  - identifier_name
+  - trailing_comma
+  - large_tuple
+  - file_length
+  - type_body_length
+  - opening_brace
+  - static_over_final_class
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - first_where
+  - unused_import
