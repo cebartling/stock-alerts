@@ -44,11 +44,50 @@ The profile must be a **macOS Development** profile that:
 - Includes the `keychain-access-groups` entitlement for `$(AppIdentifierPrefix)com.pintailconsultingllc.StockAlerts`
 - Is signed by the same team as `DEVELOPMENT_TEAM`
 
-Generate at <https://developer.apple.com/account/resources/profiles/list> if one doesn't already exist, then download and:
+If one doesn't already exist, create it on developer.apple.com (you must be logged in):
+
+#### 1. Confirm or create the App ID
+
+1. Go to <https://developer.apple.com/account/resources/identifiers/list>.
+2. Filter by **App IDs**. If `com.pintailconsultingllc.StockAlerts` already exists, click it. Otherwise click **+ → App IDs → App**, set Platform **macOS**, Bundle ID **Explicit** = `com.pintailconsultingllc.StockAlerts`.
+3. Under **Capabilities**, enable **Keychain Sharing**. The portal does not let you specify the access group string here — that is controlled by the app's `.entitlements` file. The capability just has to be turned on.
+4. Save / Continue / Register.
+
+> `$(AppIdentifierPrefix)com.pintailconsultingllc.StockAlerts` resolves to `<TEAMID>.com.pintailconsultingllc.StockAlerts` at build time. That's the default keychain group; no custom value is needed in the portal.
+
+#### 2. Make sure your Mac development certificate is registered
+
+1. Go to <https://developer.apple.com/account/resources/certificates/list>.
+2. You need an **Apple Development** (or **Mac Development**) certificate tied to your Mac. If you already build & sign locally, you have one. If not: **+ → Apple Development → Continue**, and upload a CSR generated from Keychain Access (*Certificate Assistant → Request a Certificate From a Certificate Authority*, "Saved to disk").
+
+#### 3. Register your Mac as a device
+
+1. Go to <https://developer.apple.com/account/resources/devices/list>, Platform **macOS**.
+2. You need the **Provisioning UDID** (not the hardware UUID):
+
+   ```bash
+   system_profiler SPHardwareDataType | awk '/Provisioning UDID/ {print $3}'
+   ```
+
+3. Click **+**, name the device, paste the UDID, Continue / Register.
+
+#### 4. Create the provisioning profile
+
+1. Go to <https://developer.apple.com/account/resources/profiles/list>.
+2. **+** → under **Development** pick **macOS App Development** → Continue.
+3. **App ID**: select `com.pintailconsultingllc.StockAlerts` → Continue.
+4. **Certificates**: check your Apple/Mac Development certificate → Continue.
+5. **Devices**: check your Mac → Continue.
+6. **Provisioning Profile Name**: e.g. `StockAlerts macOS Development` → Generate.
+7. **Download** the `.provisionprofile`.
+
+#### 5. Encode for the secret
 
 ```bash
 base64 -i StockAlerts_Development.provisionprofile | pbcopy
 ```
+
+Paste into `BUILD_PROVISIONING_PROFILE_BASE64`.
 
 ### `KEYCHAIN_PASSWORD`
 
