@@ -50,8 +50,8 @@ If one doesn't already exist, create it on developer.apple.com (you must be logg
 
 1. Go to <https://developer.apple.com/account/resources/identifiers/list>.
 2. Filter by **App IDs**. If `com.pintailconsultingllc.StockAlerts` already exists, click it. Otherwise click **+ → App IDs → App**, set Platform **macOS**, Bundle ID **Explicit** = `com.pintailconsultingllc.StockAlerts`.
-3. Under **Capabilities**, enable **Keychain Sharing**. The portal does not let you specify the access group string here — that is controlled by the app's `.entitlements` file. The capability just has to be turned on.
-4. Save / Continue / Register.
+3. Leave **Capabilities** alone — Keychain Sharing is an iOS-only capability and does not appear in the macOS App ID capability list. macOS enforces keychain access groups entirely via the app's `.entitlements` file plus the team prefix from the signing identity, so no portal-side toggle is required.
+4. Continue / Register.
 
 > `$(AppIdentifierPrefix)com.pintailconsultingllc.StockAlerts` resolves to `<TEAMID>.com.pintailconsultingllc.StockAlerts` at build time. That's the default keychain group; no custom value is needed in the portal.
 
