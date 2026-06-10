@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Domain
 
 @MainActor
 final class QuoteEngine: ObservableObject {

@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import StockAlerts
+import Domain
 
 struct MarketClockTests {
 

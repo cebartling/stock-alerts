@@ -1,4 +1,5 @@
 import Foundation
+import Domain
 
 actor FinnhubQuoteService: QuoteService {
     private let apiKey: String

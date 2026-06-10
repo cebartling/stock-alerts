@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Domain
 
 struct SymbolDetailView: View {
     let symbol: String

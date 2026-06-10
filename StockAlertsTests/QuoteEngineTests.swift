@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import SwiftData
+import Domain
 @testable import StockAlerts
 
 @MainActor

@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Domain
 
 @main
 struct StockAlertsApp: App {

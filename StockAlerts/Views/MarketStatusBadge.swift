@@ -1,4 +1,5 @@
 import SwiftUI
+import Domain
 
 enum MarketStatusViewModel {
     static func make(now: Date, extended: Bool) -> (isOpen: Bool, label: String) {

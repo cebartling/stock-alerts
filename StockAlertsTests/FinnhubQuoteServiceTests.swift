@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Domain
 @testable import StockAlerts
 
 struct FinnhubQuoteServiceTests {
