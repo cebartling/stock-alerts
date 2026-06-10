@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 All shell commands are run from the repo root.
 
-- **Run tests**: `./scripts/test.sh` — wraps `xcodebuild test` with the flags this project needs every time (Debug, `platform=macOS,arch=arm64`, `-allowProvisioningUpdates`). Extra args forward to `xcodebuild`.
-- **Run one suite / one test**: `./scripts/test.sh -only-testing:StockAlertsTests/KeychainStoreTests` or `-only-testing:StockAlertsTests/KeychainStoreTests/writeThenRead_roundTrips`.
+- **Run tests**: `./scripts/test.sh` — runs both layers: the `StockAlertsKit` package (`swift test`, unsigned, fast) and the app + app-target tests (`xcodebuild test` with Debug, `platform=macOS,arch=arm64`, `-allowProvisioningUpdates`). Extra args forward to `xcodebuild`.
+- **Run one app suite / test**: `./scripts/test.sh -only-testing:StockAlertsTests/KeychainStoreTests`. **Run one package suite / test**: `swift test --package-path Packages/StockAlertsKit --filter QuoteEngineTests` (no signing needed).
 - **Regenerate the `.xcodeproj`**: `xcodegen generate`. `StockAlerts.xcodeproj/` is gitignored and built from `project.yml`. **You must re-run `xcodegen generate` after adding, removing, or renaming any source file** — new files aren't part of the project until regeneration, even if the build appears to succeed from a stale project.
 - **Open in Xcode**: `open StockAlerts.xcodeproj` (requires `Local.xcconfig` — see README for setup).
 
@@ -19,50 +19,67 @@ Red → Green → Refactor is the working style for every non-UI code change in 
 
 ## Architecture
 
-A SwiftUI + SwiftData macOS menu bar app. Three scenes in `StockAlertsApp`:
+A SwiftUI + SwiftData macOS menu bar app organized as a **hexagon (ports & adapters)**, split into a local Swift package (`Packages/StockAlertsKit/`) with three compiler-enforced modules plus the app target as the composition root:
+
+```
+Packages/StockAlertsKit/Sources/
+  Domain/        entities + pure logic + driven-port protocols (Foundation only)
+  Application/   QuoteEngine core + EngineState        (depends: Domain)
+  Adapters/      SwiftData / Finnhub / UN / Keychain / AppKit  (depends: Application, Domain)
+StockAlerts/     SwiftUI views + QuoteEngineViewModel + StockAlertsApp (composition root)
+```
+
+The dependency direction is enforced two ways: **(1)** SPM target deps — `Domain` cannot `import Application`/`Adapters` (compile error); **(2)** a SwiftLint custom rule (`pure_core_no_frameworks` in `.swiftlint.yml`, run under `swiftlint --strict` in CI) — `Domain`/`Application` cannot `import SwiftUI`/`SwiftData`/`AppKit`/etc., since those system frameworks aren't blocked by SPM target deps. **Keep both intact: don't import frameworks into Domain/Application, and don't add reverse module deps.**
+
+Three scenes in `StockAlertsApp`:
 
 1. `MenuBarExtra { MenuBarPopoverView() }` — always-present ticker popover with an "Open Stock Alerts" button.
 2. `Window("Stock Alerts", id: "main") { MainWindowView() }` — single-instance main window (`NavigationSplitView` sidebar + `SymbolDetailView`). Opened via `@Environment(\.openWindow)` from the popover, paired with `NSApp.activate(ignoringOtherApps: true)` so it becomes frontmost despite `LSUIElement=YES`.
 3. `Settings { SettingsView() }` — macOS Settings scene; opened from the popover's gear via `SettingsLink`.
 
-The engine is a single `@MainActor` `ObservableObject` held as a `@StateObject` on `StockAlertsApp`:
+`QuoteEngine` (Application module) is a **framework-free** `@MainActor` core. It exposes state as a plain `EngineState` value via `private(set) var state` and an `onStateChange` callback — no `@Published`, no `ObservableObject`. The SwiftUI adapter `QuoteEngineViewModel` (app target, `StockAlerts/Views/`) sets `engine.onStateChange` to mirror state into `@Published` fields and observes the engine for the views:
 
 ```
-WatchlistStore  ─────┐
-                     ▼
-                QuoteEngine ──(polls)── QuoteService protocol ── FinnhubQuoteService
-                  │  │                                          (actor, URLSession)
-                  │  └─ alerts(for:) / markTriggered ──── AlertStore
-                  │
-                  └─ schedule notifications ── NotificationScheduler protocol
-                                              └── UNUserNotificationScheduler (prod)
+WatchlistRepository ──┐
+                      ▼
+                 QuoteEngine ──(polls)── QuoteService protocol ── FinnhubQuoteService
+                   │  │                                          (actor, URLSession)
+                   │  └─ alerts(for:) / markTriggered(id:) ── AlertRepository
+                   │
+                   └─ schedule notifications ── NotificationScheduler protocol
+                                               └── UNUserNotificationScheduler (prod)
+
+       QuoteEngine.state ──onStateChange──▶ QuoteEngineViewModel (@Published) ──▶ SwiftUI views
 ```
 
-Critical injection seams that exist **only** so tests can replace them. Do not collapse:
+Critical injection seams (driven ports in `Domain`) that exist **only** so tests can replace them. Do not collapse:
 
-- `QuoteService` protocol — production `FinnhubQuoteService`; tests use `FakeQuoteService` / `ToggleableQuoteService` / `GenericThrowingQuoteService` in `QuoteEngineTests.swift`.
-- `NotificationScheduler` protocol — production wraps `UNUserNotificationCenter`; tests use `FakeNotificationScheduler`.
+- `QuoteService` protocol — production `FinnhubQuoteService`; tests use `FakeQuoteService` / `ToggleableQuoteService` / `GenericThrowingQuoteService` in `Packages/StockAlertsKit/Tests/ApplicationTests/QuoteEngineTests.swift`.
+- `NotificationScheduler` protocol — production `UNUserNotificationScheduler`; tests use `FakeNotificationScheduler`.
+- `AlertRepository` / `WatchlistRepository` protocols — production `SwiftDataAlertRepository` / `SwiftDataWatchlistRepository`; tests use the in-memory `FakeAlertRepository` / `FakeWatchlistRepository`.
 - `isMarketOpen: @Sendable () -> Bool` closure passed into `QuoteEngine.init` — production reads `UserDefaults "extendedHours"` + `MarketClock.isOpen`; tests inject a fixed `{ true }` / `{ false }`.
 
-`FinnhubQuoteService` takes `session: URLSession = .shared` in its init specifically so tests can pass a `URLSession` backed by the `StubURLProtocol` subclass in `StockAlertsTests/StubURLProtocol.swift` — that's how the Finnhub service is unit tested without the network.
+`FinnhubQuoteService` takes `session: URLSession = .shared` in its init specifically so tests can pass a `URLSession` backed by the `StubURLProtocol` subclass in `Packages/StockAlertsKit/Tests/AdaptersTests/StubURLProtocol.swift` — that's how the Finnhub service is unit tested without the network. (That suite is `@Suite(.serialized)` because it shares `StubURLProtocol`'s static handler and `swift test` parallelizes by default.)
 
-### SwiftData
+### Domain entities vs. SwiftData records
 
-Models: `WatchedSymbol` (watchlist entries with `sortOrder`), `PriceAlert` (alert rows with condition + threshold). Both live under `StockAlerts/Models/`.
+The domain works in **pure value-type structs** — `WatchedSymbol` and `PriceAlert` (with `evaluate(against:)`) in `Domain/`. SwiftData is an adapter detail: `SymbolRecord` / `AlertRecord` (`@Model`, in `Adapters/`) are persistence-only, mapped to/from the domain structs via `init(_:)` / `asDomain`. The engine and views never touch `@Model` types.
 
-`WatchlistStore` and `AlertStore` (both `@MainActor` classes in `StockAlerts/Stores/`) are the only way the engine mutates SwiftData. Route state changes through the stores, not through direct `context.insert`/`.delete` — `AlertStore.markTriggered` exists specifically so the engine never touches `@Model` properties directly.
+`SwiftDataAlertRepository` / `SwiftDataWatchlistRepository` (`@MainActor`, in `Adapters/`) are the only things that mutate SwiftData. Route state changes through the repository ports — `markTriggered(id:)` exists so the engine never touches persistence types directly.
+
+Because the views no longer use SwiftData's `@Query` (it's hidden behind the repositories), `QuoteEngineViewModel` re-reads the lists via `refresh()` after every mutation. Route every watchlist/alert write through a `QuoteEngineViewModel` method (which calls `refresh()`), not through a repository directly from a view.
 
 **Gotcha: `ModelContext` only weakly references its `ModelContainer`.** If a helper or factory returns just a context and the owning container deallocates, the next `context.fetch` / `.save` traps inside SwiftData with `EXC_BREAKPOINT` and a "type metadata for `<ModelType>`" frame. `StockAlertsTests/TestHelpers.swift:makeInMemoryContainer()` returns `(container, context)` and test suites store both as `let` properties to keep the container alive for the whole test. In `StockAlertsApp` the container is held as a `private let` on the `App` struct.
 
 ### Keychain / Secrets
 
-`KeychainStore` routes every `SecItem*` call through `kSecUseDataProtectionKeychain: true`. The app declares `keychain-access-groups` in its entitlements for this to work, which means the app **must be signed with a real development certificate** — ad-hoc signing fails at codesign-time. The team ID is read from the gitignored `Local.xcconfig`.
+`KeychainStore` (`Adapters/`) routes every `SecItem*` call through `kSecUseDataProtectionKeychain: true`. The app declares `keychain-access-groups` in its entitlements for this to work, which means the app **must be signed with a real development certificate** — ad-hoc signing fails at codesign-time. The team ID is read from the gitignored `Local.xcconfig`.
 
-`Secrets.finnhubKey` is the production read/write wrapper for the Finnhub API key. Tests use UUID-scoped service names via `makeStore()` in `KeychainStoreTests.swift` to isolate.
+`Secrets.finnhubKey` (`Adapters/`) is the production read/write wrapper for the Finnhub API key. `KeychainStoreTests` stays in the **signed app target** (not the package, which CI builds unsigned) and uses UUID-scoped service names via `makeStore()` to isolate.
 
 ### Polling and power
 
-`QuoteEngine.start()` launches a `Task` loop that calls `tick()` and sleeps `pollInterval` seconds. `tick()` gates on `isMarketOpen()` (injected closure) and skips if the watchlist is empty. `PowerObserver` (`StockAlerts/Power/PowerObserver.swift`) wires `NSWorkspace.willSleepNotification` → `engine.stop()` and `didWakeNotification` → `engine.start()` — this is the only reason the app has a `PowerObserver` field on `StockAlertsApp`.
+`QuoteEngine.start()` launches a `Task` loop that calls `tick()` and sleeps `pollInterval` seconds. `tick()` gates on `isMarketOpen()` (injected closure) and skips if the watchlist is empty. `PowerObserver` (`Adapters/PowerObserver.swift`) wires `NSWorkspace.willSleepNotification` → `viewModel.stop()` and `didWakeNotification` → `viewModel.start()` — this is the only reason the app has a `PowerObserver` field on `StockAlertsApp`.
 
 ## Signing and entitlements
 
@@ -72,7 +89,7 @@ Any entitlement change goes through `project.yml` (under `targets.StockAlerts.en
 
 ## SourceKit diagnostics
 
-SourceKit's background indexer regularly emits false-positive `Cannot find type 'X' in scope` errors on newly added files across module boundaries (e.g. test files that `@testable import StockAlerts`). These almost never reflect reality — trust the `xcodebuild` result, not the in-editor diagnostic. If a build via `scripts/test.sh` succeeds, ignore the red squiggles; they'll clear after the next indexer pass.
+SourceKit's background indexer regularly emits false-positive errors on newly added or moved files across module boundaries — `Cannot find type 'X' in scope`, and especially `No such module 'Domain' / 'Application' / 'Adapters' / 'Testing'` before `xcodegen generate` / a build has resolved the package. These almost never reflect reality — trust the `swift build` / `xcodebuild` result, not the in-editor diagnostic. If `scripts/test.sh` (or `swift test --package-path Packages/StockAlertsKit`) succeeds, ignore the red squiggles; they clear after the next indexer pass.
 
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->

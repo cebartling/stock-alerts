@@ -1,9 +1,11 @@
 included:
   - StockAlerts
   - StockAlertsTests
+  - Packages/StockAlertsKit/Sources
 excluded:
   - StockAlerts.xcodeproj
   - scripts
+  - Packages/StockAlertsKit/.build
 disabled_rules:
   - line_length
   - todo
@@ -19,3 +21,16 @@ opt_in_rules:
   - explicit_init
   - first_where
   - unused_import
+
+# Enforce the hexagon's framework-free core: the Domain and Application modules
+# must not import UI/persistence/system frameworks. SPM enforces the module
+# dependency arrows (Domain cannot import Adapters), but system frameworks like
+# SwiftUI/SwiftData are available to every target, so this rule is what keeps the
+# core pure. Such code belongs in the Adapters module.
+custom_rules:
+  pure_core_no_frameworks:
+    name: "Framework import in pure core module"
+    included: ".*/Sources/(Domain|Application)/.*\\.swift"
+    regex: 'import +(SwiftUI|SwiftData|AppKit|UIKit|UserNotifications|Security|Combine|CoreData)\b'
+    message: "Domain/Application must stay framework-free; move framework code to the Adapters module."
+    severity: error

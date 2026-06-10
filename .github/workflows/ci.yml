@@ -37,7 +37,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/Library/Developer/Xcode/DerivedData
-          key: deriveddata-${{ runner.os }}-${{ hashFiles('project.yml', 'StockAlerts/**', 'StockAlertsTests/**') }}
+          key: deriveddata-${{ runner.os }}-${{ hashFiles('project.yml', 'StockAlerts/**', 'StockAlertsTests/**', 'Packages/**') }}
           restore-keys: |
             deriveddata-${{ runner.os }}-
 
@@ -61,6 +61,12 @@ jobs:
 
       - name: Generate Xcode project
         run: xcodegen generate
+
+      # The hexagon's Domain/Application/Adapters tests live in the SPM package
+      # and need no signing — run them directly. (The app's xcodebuild step
+      # below builds the package as a dependency but does not run these.)
+      - name: Run package tests (StockAlertsKit)
+        run: swift test --package-path Packages/StockAlertsKit
 
       - name: Run tests (unsigned, KeychainStoreTests skipped)
         run: |
