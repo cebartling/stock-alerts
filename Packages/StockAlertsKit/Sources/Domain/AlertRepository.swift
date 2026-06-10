@@ -4,6 +4,7 @@ import Foundation
 /// abstraction; a SwiftData-backed adapter (in the Adapters module) conforms.
 @MainActor
 public protocol AlertRepository {
+    func all() -> [PriceAlert]
     func alerts(for symbol: String) -> [PriceAlert]
     func add(_ alert: PriceAlert)
     func remove(id: UUID)

@@ -3,11 +3,14 @@ import Domain
 
 // In-memory fakes for the repository ports. They store domain value types
 // directly — no SwiftData — so application-core tests stay fast and unsigned.
-// (These move into the package's test support in Phase 3.)
 
 @MainActor
 final class FakeAlertRepository: AlertRepository {
     private(set) var stored: [PriceAlert] = []
+
+    func all() -> [PriceAlert] {
+        stored
+    }
 
     func alerts(for symbol: String) -> [PriceAlert] {
         let normalized = symbol.uppercased()

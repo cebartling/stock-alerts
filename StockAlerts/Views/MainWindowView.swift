@@ -1,13 +1,8 @@
 import SwiftUI
-import SwiftData
-import Adapters
+import Domain
 
 struct MainWindowView: View {
-    @EnvironmentObject private var engine: QuoteEngine
-    @Environment(\.modelContext) private var context
-    // Interim: reads on @Query for live updates; writes route through the
-    // repository port. The view-model swap lands in Phase 4.
-    @Query(sort: \SymbolRecord.sortOrder) private var symbols: [SymbolRecord]
+    @EnvironmentObject private var viewModel: QuoteEngineViewModel
 
     @State private var selection: String?
     @State private var newSymbol: String = ""
@@ -31,7 +26,7 @@ struct MainWindowView: View {
             }
             ToolbarItem {
                 Button {
-                    Task { await engine.tick() }
+                    Task { await viewModel.tick() }
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
@@ -47,15 +42,12 @@ struct MainWindowView: View {
         VStack(spacing: 0) {
             List(selection: $selection) {
                 Section("Watchlist") {
-                    ForEach(symbols) { item in
+                    ForEach(viewModel.watchlist) { item in
                         sidebarRow(item)
                             .tag(item.symbol)
                     }
                     .onDelete { offsets in
-                        let repository = SwiftDataWatchlistRepository(context: context)
-                        for index in offsets {
-                            repository.remove(symbols[index].symbol)
-                        }
+                        viewModel.removeSymbols(at: offsets)
                     }
                 }
             }
@@ -74,7 +66,7 @@ struct MainWindowView: View {
             .padding(.top, 10)
 
             HStack {
-                LastUpdatedLabel(date: engine.lastSuccessfulFetch)
+                LastUpdatedLabel(date: viewModel.lastSuccessfulFetch)
                 Spacer()
             }
             .padding(.horizontal, 10)
@@ -84,11 +76,11 @@ struct MainWindowView: View {
     }
 
     @ViewBuilder
-    private func sidebarRow(_ item: SymbolRecord) -> some View {
+    private func sidebarRow(_ item: WatchedSymbol) -> some View {
         HStack {
             Text(item.symbol).fontWeight(.medium)
             Spacer()
-            if let q = engine.quotes[item.symbol] {
+            if let q = viewModel.quotes[item.symbol] {
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(String(format: "%.2f", q.price))
                         .monospacedDigit()
@@ -125,8 +117,7 @@ struct MainWindowView: View {
     private func addSymbol() {
         let trimmed = newSymbol.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        let repository = SwiftDataWatchlistRepository(context: context)
-        repository.add(trimmed)
+        viewModel.addSymbol(trimmed)
         newSymbol = ""
     }
 }

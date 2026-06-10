@@ -1,16 +1,34 @@
 import Foundation
-import SwiftUI
 import Domain
 
+/// Snapshot of everything the UI renders from the engine. A plain value type so
+/// the core stays framework-free; a SwiftUI adapter mirrors it into @Published.
+public struct EngineState {
+    public var quotes: [String: Quote]
+    public var lastError: QuoteServiceError?
+    public var lastSuccessfulFetch: Date?
+    public var clockTick: Date
+
+    public init(
+        quotes: [String: Quote] = [:],
+        lastError: QuoteServiceError? = nil,
+        lastSuccessfulFetch: Date? = nil,
+        clockTick: Date
+    ) {
+        self.quotes = quotes
+        self.lastError = lastError
+        self.lastSuccessfulFetch = lastSuccessfulFetch
+        self.clockTick = clockTick
+    }
+}
+
 @MainActor
-final class QuoteEngine: ObservableObject {
-    @Published private(set) var quotes: [String: Quote] = [:]
-    @Published private(set) var lastError: QuoteServiceError?
-    @Published private(set) var lastSuccessfulFetch: Date?
-    // Wall-clock heartbeat: published unconditionally on `clockInterval` so
-    // views that depend on time (e.g. the menu-bar Market Open/Closed dot)
-    // re-render at session boundaries even when tick() is gated off.
-    @Published private(set) var clockTick: Date
+public final class QuoteEngine {
+    /// Current state. Read directly; observe changes via `onStateChange`.
+    public private(set) var state: EngineState
+    /// Invoked on the main actor whenever `state` changes. The SwiftUI
+    /// view-model adapter sets this to mirror state into its @Published fields.
+    public var onStateChange: ((EngineState) -> Void)?
 
     private let service: QuoteService
     private let alertRepository: AlertRepository
@@ -21,14 +39,14 @@ final class QuoteEngine: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var clockTask: Task<Void, Never>?
 
-    var pollInterval: TimeInterval = 30
-    var clockInterval: TimeInterval = 60
+    public var pollInterval: TimeInterval = 30
+    public var clockInterval: TimeInterval = 60
 
-    init(
+    public init(
         service: QuoteService,
         alertRepository: AlertRepository,
         watchlistRepository: WatchlistRepository,
-        notifications: NotificationScheduler = UNUserNotificationScheduler(),
+        notifications: NotificationScheduler,
         isMarketOpen: @escaping @Sendable () -> Bool = { MarketClock.isOpen(at: .now) },
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
@@ -38,10 +56,10 @@ final class QuoteEngine: ObservableObject {
         self.notifications = notifications
         self.isMarketOpen = isMarketOpen
         self.now = now
-        self.clockTick = now()
+        self.state = EngineState(clockTick: now())
     }
 
-    func start() {
+    public func start() {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -61,31 +79,37 @@ final class QuoteEngine: ObservableObject {
         }
     }
 
-    func stop() {
+    public func stop() {
         pollTask?.cancel()
         clockTask?.cancel()
     }
 
-    func tickClock() {
-        clockTick = now()
+    public func tickClock() {
+        state.clockTick = now()
+        emit()
     }
 
-    func tick() async {
+    public func tick() async {
         guard isMarketOpen() else { return }
         let symbols = watchlistRepository.symbols
         guard !symbols.isEmpty else { return }
 
         do {
             let fetched = try await service.fetchQuotes(symbols: symbols)
-            for quote in fetched { quotes[quote.symbol] = quote }
-            lastError = nil
-            lastSuccessfulFetch = now()
+            for quote in fetched { state.quotes[quote.symbol] = quote }
+            state.lastError = nil
+            state.lastSuccessfulFetch = now()
             await evaluateAlerts(quotes: fetched)
         } catch let error as QuoteServiceError {
-            lastError = error
+            state.lastError = error
         } catch {
-            lastError = .network(error)
+            state.lastError = .network(error)
         }
+        emit()
+    }
+
+    private func emit() {
+        onStateChange?(state)
     }
 
     private func evaluateAlerts(quotes: [Quote]) async {

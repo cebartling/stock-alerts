@@ -1,12 +1,12 @@
 import Foundation
 import UserNotifications
+import Domain
 
-protocol NotificationScheduler: Sendable {
-    func schedule(id: String, title: String, body: String) async
-}
+/// Production `NotificationScheduler` adapter backed by UserNotifications.
+public struct UNUserNotificationScheduler: NotificationScheduler {
+    public init() {}
 
-struct UNUserNotificationScheduler: NotificationScheduler {
-    func schedule(id: String, title: String, body: String) async {
+    public func schedule(id: String, title: String, body: String) async {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body

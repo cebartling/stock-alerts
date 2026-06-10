@@ -1,12 +1,15 @@
 import SwiftUI
 import SwiftData
 import Domain
+import Application
 import Adapters
 
 @main
 struct StockAlertsApp: App {
+    // Retained for the app's lifetime so the repositories' main context stays
+    // valid (ModelContext only weakly references its container).
     private let container: ModelContainer
-    @StateObject private var engine: QuoteEngine
+    @StateObject private var viewModel: QuoteEngineViewModel
     @State private var powerObserver: PowerObserver?
 
     init() {
@@ -25,6 +28,7 @@ struct StockAlertsApp: App {
             service: service,
             alertRepository: alertRepository,
             watchlistRepository: watchlistRepository,
+            notifications: UNUserNotificationScheduler(),
             isMarketOpen: {
                 let extended = UserDefaults.standard.bool(forKey: DefaultsKey.extendedHours)
                 return MarketClock.isOpen(at: .now, extended: extended)
@@ -33,41 +37,42 @@ struct StockAlertsApp: App {
         engine.pollInterval = TimeInterval(
             max(10, UserDefaults.standard.integer(forKey: DefaultsKey.pollIntervalSeconds))
         )
-        _engine = StateObject(wrappedValue: engine)
+        _viewModel = StateObject(wrappedValue: QuoteEngineViewModel(
+            engine: engine,
+            alertRepository: alertRepository,
+            watchlistRepository: watchlistRepository
+        ))
     }
 
     var body: some Scene {
         MenuBarExtra {
             MenuBarPopoverView()
-                .environmentObject(engine)
-                .modelContainer(container)
+                .environmentObject(viewModel)
                 .task {
                     await NotificationAuthorizer.requestAuthorization()
                     if powerObserver == nil {
                         powerObserver = PowerObserver(
-                            onSleep: { engine.stop() },
-                            onWake: { engine.start() }
+                            onSleep: { viewModel.stop() },
+                            onWake: { viewModel.start() }
                         )
                     }
-                    engine.start()
+                    viewModel.start()
                 }
         } label: {
             MenuBarLabel()
-                .environmentObject(engine)
-                .modelContainer(container)
+                .environmentObject(viewModel)
         }
         .menuBarExtraStyle(.window)
 
         Window("Stock Alerts", id: "main") {
             MainWindowView()
-                .environmentObject(engine)
-                .modelContainer(container)
+                .environmentObject(viewModel)
         }
         .defaultSize(width: 800, height: 520)
 
         Settings {
             SettingsView()
-                .environmentObject(engine)
+                .environmentObject(viewModel)
         }
     }
 }

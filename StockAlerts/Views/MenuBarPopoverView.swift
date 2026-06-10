@@ -1,13 +1,9 @@
 import SwiftUI
-import SwiftData
-import Adapters
+import Domain
 
 struct MenuBarPopoverView: View {
-    @EnvironmentObject private var engine: QuoteEngine
+    @EnvironmentObject private var viewModel: QuoteEngineViewModel
     @Environment(\.openWindow) private var openWindow
-    // Interim: reads stay on @Query for live updates; the clean view-model swap
-    // lands in Phase 4. Writes already route through the repository ports.
-    @Query(sort: \SymbolRecord.sortOrder) private var symbols: [SymbolRecord]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -41,13 +37,13 @@ struct MenuBarPopoverView: View {
 
             Divider()
 
-            if symbols.isEmpty {
+            if viewModel.watchlist.isEmpty {
                 Text("No symbols yet.")
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
                 VStack(spacing: 4) {
-                    ForEach(symbols) { item in
+                    ForEach(viewModel.watchlist) { item in
                         row(for: item)
                     }
                 }
@@ -55,7 +51,7 @@ struct MenuBarPopoverView: View {
 
             Divider()
             HStack {
-                LastUpdatedLabel(date: engine.lastSuccessfulFetch)
+                LastUpdatedLabel(date: viewModel.lastSuccessfulFetch)
                 Spacer()
                 Button("Quit Stock Alerts") { NSApp.terminate(nil) }
                     .buttonStyle(.borderless)
@@ -66,11 +62,11 @@ struct MenuBarPopoverView: View {
     }
 
     @ViewBuilder
-    private func row(for item: SymbolRecord) -> some View {
+    private func row(for item: WatchedSymbol) -> some View {
         HStack {
             Text(item.symbol).fontWeight(.medium)
             Spacer()
-            if let quote = engine.quotes[item.symbol] {
+            if let quote = viewModel.quotes[item.symbol] {
                 Text(String(format: "%.2f", quote.price)).monospacedDigit()
                 Text(String(format: "%+.2f%%", quote.changePercent))
                     .font(.caption)

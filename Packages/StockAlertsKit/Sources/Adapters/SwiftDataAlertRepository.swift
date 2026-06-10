@@ -12,6 +12,10 @@ public final class SwiftDataAlertRepository: AlertRepository {
         self.context = context
     }
 
+    public func all() -> [PriceAlert] {
+        fetchAll().map(\.asDomain)
+    }
+
     public func alerts(for symbol: String) -> [PriceAlert] {
         let normalized = symbol.uppercased()
         return fetchAll()

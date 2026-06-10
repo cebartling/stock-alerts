@@ -1,26 +1,20 @@
 import SwiftUI
-import SwiftData
 import Domain
-import Adapters
 
 struct SymbolDetailView: View {
     let symbol: String
 
-    @EnvironmentObject private var engine: QuoteEngine
-    @Environment(\.modelContext) private var context
-    // Interim: reads on @Query for live updates; writes route through the
-    // repository ports. The view-model swap lands in Phase 4.
-    @Query private var allAlerts: [AlertRecord]
+    @EnvironmentObject private var viewModel: QuoteEngineViewModel
 
     @State private var newCondition: PriceAlert.Condition = .above
     @State private var newThresholdText: String = ""
 
-    private var alerts: [AlertRecord] {
+    private var alerts: [PriceAlert] {
         let upper = symbol.uppercased()
-        return allAlerts.filter { $0.symbol == upper }
+        return viewModel.alerts.filter { $0.symbol == upper }
     }
 
-    private var quote: Quote? { engine.quotes[symbol.uppercased()] }
+    private var quote: Quote? { viewModel.quotes[symbol.uppercased()] }
 
     var body: some View {
         ScrollView {
@@ -32,8 +26,7 @@ struct SymbolDetailView: View {
                 newAlertSection
                 Divider()
                 Button(role: .destructive) {
-                    let repository = SwiftDataWatchlistRepository(context: context)
-                    repository.remove(symbol)
+                    viewModel.removeSymbol(symbol)
                 } label: {
                     Label("Remove from watchlist", systemImage: "trash")
                 }
@@ -117,7 +110,7 @@ struct SymbolDetailView: View {
     }
 
     @ViewBuilder
-    private func alertRow(_ alert: AlertRecord) -> some View {
+    private func alertRow(_ alert: PriceAlert) -> some View {
         HStack {
             Text(label(for: alert))
                 .strikethrough(alert.isTriggered)
@@ -132,14 +125,12 @@ struct SymbolDetailView: View {
             Spacer()
             if alert.isTriggered {
                 Button("Reset") {
-                    let repository = SwiftDataAlertRepository(context: context)
-                    repository.reset(id: alert.id)
+                    viewModel.resetAlert(id: alert.id)
                 }
                 .buttonStyle(.borderless)
             }
             Button(role: .destructive) {
-                let repository = SwiftDataAlertRepository(context: context)
-                repository.remove(id: alert.id)
+                viewModel.removeAlert(id: alert.id)
             } label: {
                 Image(systemName: "trash")
             }
@@ -174,7 +165,7 @@ struct SymbolDetailView: View {
 
     // MARK: - helpers
 
-    private func label(for alert: AlertRecord) -> String {
+    private func label(for alert: PriceAlert) -> String {
         switch alert.condition {
         case .above:             return "Price above \(String(format: "%.2f", alert.threshold))"
         case .below:             return "Price below \(String(format: "%.2f", alert.threshold))"
@@ -185,8 +176,7 @@ struct SymbolDetailView: View {
 
     private func addAlert() {
         guard let value = Double(newThresholdText) else { return }
-        let repository = SwiftDataAlertRepository(context: context)
-        repository.add(PriceAlert(symbol: symbol, condition: newCondition, threshold: value))
+        viewModel.addAlert(PriceAlert(symbol: symbol, condition: newCondition, threshold: value))
         newThresholdText = ""
     }
 }

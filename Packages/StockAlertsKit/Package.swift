@@ -23,6 +23,7 @@ let package = Package(
         .target(name: "Application", dependencies: ["Domain"]),
         .target(name: "Adapters", dependencies: ["Application", "Domain"]),
         .testTarget(name: "DomainTests", dependencies: ["Domain"]),
+        .testTarget(name: "ApplicationTests", dependencies: ["Application", "Domain"]),
     ],
     swiftLanguageModes: [.v5]
 )

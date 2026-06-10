@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import Domain
-@testable import StockAlerts
+@testable import Application
 
 @MainActor
 struct QuoteEngineTests {
@@ -64,7 +64,7 @@ struct QuoteEngineTests {
         )
         h.watchlist.add("AAPL")
         await h.engine.tick()
-        #expect(h.engine.quotes.isEmpty)
+        #expect(h.engine.state.quotes.isEmpty)
         #expect(h.scheduler.scheduled.isEmpty)
     }
 
@@ -73,7 +73,7 @@ struct QuoteEngineTests {
         // No watched symbols; should not call service at all and not populate quotes.
         let h = makeEngine(quotes: .success([makeQuote("AAPL", price: 1)]))
         await h.engine.tick()
-        #expect(h.engine.quotes.isEmpty)
+        #expect(h.engine.state.quotes.isEmpty)
         let callCount = await h.service.callCount
         #expect(callCount == 0)
     }
@@ -91,8 +91,8 @@ struct QuoteEngineTests {
         h.watchlist.add("AAPL")
         h.watchlist.add("MSFT")
         await h.engine.tick()
-        #expect(h.engine.quotes["AAPL"]?.price == 111)
-        #expect(h.engine.quotes["MSFT"]?.price == 222)
+        #expect(h.engine.state.quotes["AAPL"]?.price == 111)
+        #expect(h.engine.state.quotes["MSFT"]?.price == 222)
     }
 
     // MARK: - alerts
@@ -146,10 +146,10 @@ struct QuoteEngineTests {
 
         await h.engine.tick()
 
-        if case .rateLimited = h.engine.lastError {
+        if case .rateLimited = h.engine.state.lastError {
             // ok
         } else {
-            Issue.record("Expected rateLimited, got \(String(describing: h.engine.lastError))")
+            Issue.record("Expected rateLimited, got \(String(describing: h.engine.state.lastError))")
         }
     }
 
@@ -168,11 +168,11 @@ struct QuoteEngineTests {
 
         await engine.tick()
 
-        if case .network(let underlying) = engine.lastError,
+        if case .network(let underlying) = engine.state.lastError,
            let urlError = underlying as? URLError {
             #expect(urlError.code == .notConnectedToInternet)
         } else {
-            Issue.record("Expected .network wrapping URLError, got \(String(describing: engine.lastError))")
+            Issue.record("Expected .network wrapping URLError, got \(String(describing: engine.state.lastError))")
         }
     }
 
@@ -238,14 +238,14 @@ struct QuoteEngineTests {
 
         // First tick fails — lastError is set.
         await engine.tick()
-        #expect(engine.lastError != nil)
+        #expect(engine.state.lastError != nil)
 
         // Flip the service to return a valid quote and tick again.
         await service.setResult(.success([makeQuote("AAPL", price: 100)]))
         await engine.tick()
 
-        #expect(engine.lastError == nil)
-        #expect(engine.quotes["AAPL"]?.price == 100)
+        #expect(engine.state.lastError == nil)
+        #expect(engine.state.quotes["AAPL"]?.price == 100)
     }
 
     // MARK: - lastSuccessfulFetch timestamp
@@ -253,7 +253,7 @@ struct QuoteEngineTests {
     @Test
     func lastSuccessfulFetch_isNil_beforeFirstTick() {
         let h = makeEngine()
-        #expect(h.engine.lastSuccessfulFetch == nil)
+        #expect(h.engine.state.lastSuccessfulFetch == nil)
     }
 
     @Test
@@ -267,7 +267,7 @@ struct QuoteEngineTests {
 
         await h.engine.tick()
 
-        #expect(h.engine.lastSuccessfulFetch == fixed)
+        #expect(h.engine.state.lastSuccessfulFetch == fixed)
     }
 
     @Test
@@ -289,15 +289,15 @@ struct QuoteEngineTests {
         )
 
         await engine.tick()
-        #expect(engine.lastSuccessfulFetch == firstSuccess)
+        #expect(engine.state.lastSuccessfulFetch == firstSuccess)
 
         // Move clock forward and have the next tick fail; timestamp must NOT regress or clear.
         nowValue = firstSuccess.addingTimeInterval(60)
         await service.setResult(.failure(.rateLimited))
         await engine.tick()
 
-        #expect(engine.lastError != nil)
-        #expect(engine.lastSuccessfulFetch == firstSuccess)
+        #expect(engine.state.lastError != nil)
+        #expect(engine.state.lastSuccessfulFetch == firstSuccess)
     }
 
     @Test
@@ -311,7 +311,7 @@ struct QuoteEngineTests {
 
         await h.engine.tick()
 
-        #expect(h.engine.lastSuccessfulFetch == nil)
+        #expect(h.engine.state.lastSuccessfulFetch == nil)
     }
 
     @Test
@@ -324,7 +324,7 @@ struct QuoteEngineTests {
 
         await h.engine.tick()
 
-        #expect(h.engine.lastSuccessfulFetch == nil)
+        #expect(h.engine.state.lastSuccessfulFetch == nil)
     }
 
     @Test
@@ -334,8 +334,22 @@ struct QuoteEngineTests {
 
         await h.engine.tick()
 
-        #expect(h.engine.quotes["AAPL"]?.price == 150)
+        #expect(h.engine.state.quotes["AAPL"]?.price == 150)
         #expect(h.scheduler.scheduled.isEmpty)
+    }
+
+    // MARK: - state change callback
+
+    @Test
+    func onStateChange_firesWithLatestStateAfterTick() async {
+        let h = makeEngine(quotes: .success([makeQuote("AAPL", price: 150)]))
+        h.watchlist.add("AAPL")
+        var observed: [String: Quote] = [:]
+        h.engine.onStateChange = { state in observed = state.quotes }
+
+        await h.engine.tick()
+
+        #expect(observed["AAPL"]?.price == 150)
     }
 
     // MARK: - clockTick (UI re-render heartbeat)
@@ -344,7 +358,7 @@ struct QuoteEngineTests {
     func clockTick_initializedFromNowClosure() {
         let fixed = Date(timeIntervalSince1970: 1_800_000_000)
         let h = makeEngine(now: { fixed })
-        #expect(h.engine.clockTick == fixed)
+        #expect(h.engine.state.clockTick == fixed)
     }
 
     @Test
@@ -353,7 +367,7 @@ struct QuoteEngineTests {
         let h = makeEngine(now: { nowValue })
         nowValue = Date(timeIntervalSince1970: 1_800_000_060)
         h.engine.tickClock()
-        #expect(h.engine.clockTick == Date(timeIntervalSince1970: 1_800_000_060))
+        #expect(h.engine.state.clockTick == Date(timeIntervalSince1970: 1_800_000_060))
     }
 
     @Test
@@ -367,7 +381,7 @@ struct QuoteEngineTests {
         )
         nowValue = Date(timeIntervalSince1970: 1_800_000_060)
         h.engine.tickClock()
-        #expect(h.engine.clockTick == Date(timeIntervalSince1970: 1_800_000_060))
+        #expect(h.engine.state.clockTick == Date(timeIntervalSince1970: 1_800_000_060))
     }
 }
 
