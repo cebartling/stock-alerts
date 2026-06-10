@@ -22,6 +22,10 @@ Local.xcconfig
 *.dSYM.zip
 *.dSYM
 
+## Release pipeline artifacts (scripts/release.sh) — archive/export staging and DMGs
+build/
+dist/
+
 ## Playgrounds
 timeline.xctimeline
 playground.xcworkspace

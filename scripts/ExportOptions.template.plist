@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Export options template for scripts/release.sh.
+
+  This is the COMMITTED template. The script substitutes __DEVELOPMENT_TEAM__
+  with the DEVELOPMENT_TEAM value from the gitignored Local.xcconfig and writes
+  the result to build/ExportOptions.plist before each -exportArchive. Keeping
+  the team ID out of the committed file means it lives in exactly one place.
+
+  - method=developer-id: outside-the-Mac-App-Store distribution. The export
+    step re-signs the .app with a "Developer ID Application" identity; hardened
+    runtime carries over from the Release build settings (ENABLE_HARDENED_RUNTIME).
+  - signingStyle=automatic: Xcode fetches/creates the Developer ID provisioning
+    profile on demand (Apple ID must be signed into Xcode → Settings → Accounts).
+    The profile is required because the app declares keychain-access-groups.
+    First-archive "no Developer ID Application provisioning profile" failures are
+    fixed by opening the project in Xcode once; see documentation/release.md.
+-->
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>developer-id</string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+    <key>teamID</key>
+    <string>__DEVELOPMENT_TEAM__</string>
+</dict>
+</plist>
