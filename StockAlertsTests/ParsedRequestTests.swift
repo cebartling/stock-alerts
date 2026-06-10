@@ -29,7 +29,8 @@ struct ParsedRequestTests {
         let req = ParsedRequest(Data(full.utf8))
         #expect(req?.method == "POST")
         #expect(req?.path == "/watchlist")
-        #expect(req.map { String(decoding: $0.body, as: UTF8.self) } == #"{"symbol":"MSFT"}"#)
+        let bodyText = req.flatMap { String(bytes: $0.body, encoding: .utf8) }
+        #expect(bodyText == #"{"symbol":"MSFT"}"#)
     }
 
     @Test
