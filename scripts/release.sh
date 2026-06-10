@@ -124,7 +124,7 @@ export_app() {
 }
 
 read_version() {
-    VERSION="$(defaults read "$APP_PATH/Contents/Info" CFBundleShortVersionString)"
+    VERSION="$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_PATH/Contents/Info.plist")"
     [ -n "$VERSION" ] || fail "Could not read CFBundleShortVersionString from the exported app"
     log "Version: $VERSION"
 }
