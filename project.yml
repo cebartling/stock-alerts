@@ -11,6 +11,10 @@ configFiles:
   Debug: Local.xcconfig
   Release: Local.xcconfig
 
+packages:
+  StockAlertsKit:
+    path: Packages/StockAlertsKit
+
 settings:
   base:
     SWIFT_VERSION: "5.10"
@@ -27,6 +31,13 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - path: StockAlerts
+    dependencies:
+      - package: StockAlertsKit
+        product: Domain
+      - package: StockAlertsKit
+        product: Application
+      - package: StockAlertsKit
+        product: Adapters
     info:
       path: StockAlerts/Info.plist
       properties:
@@ -63,6 +74,12 @@ targets:
       - path: StockAlertsTests
     dependencies:
       - target: StockAlerts
+      - package: StockAlertsKit
+        product: Domain
+      - package: StockAlertsKit
+        product: Application
+      - package: StockAlertsKit
+        product: Adapters
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.pintailconsultingllc.StockAlertsTests
