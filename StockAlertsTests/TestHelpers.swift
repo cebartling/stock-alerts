@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import Adapters
 @testable import StockAlerts
 
 enum TestHelpers {
@@ -11,7 +12,7 @@ enum TestHelpers {
     static func makeInMemoryContainer() throws -> (container: ModelContainer, context: ModelContext) {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(
-            for: WatchedSymbol.self, PriceAlert.self,
+            for: SymbolRecord.self, AlertRecord.self,
             configurations: config
         )
         return (container, container.mainContext)

@@ -2,6 +2,29 @@
 
 Stock alerts menu bar app for macOS.
 
+## Architecture
+
+A SwiftUI + SwiftData menu bar app built as a **hexagon (ports & adapters)**: a framework-free core in a local Swift package, with infrastructure and UI as adapters around it. The boundary is enforced two ways — SPM module dependencies (the core can't import the infrastructure module) and a SwiftLint rule that blocks UI/persistence-framework imports in the core. See [ADR-0009](documentation/adr/0009-hexagonal-architecture.md) and the full [ADR index](documentation/adr/README.md).
+
+```mermaid
+graph TD
+    subgraph pkg["Packages/StockAlertsKit (Swift package)"]
+        DOMAIN["Domain<br/>entities + ports (Foundation only)"]
+        APP["Application<br/>QuoteEngine core + EngineState"]
+        ADAPT["Adapters<br/>SwiftData · Finnhub · UserNotifications · Keychain · AppKit"]
+    end
+    ROOT["StockAlerts (app target)<br/>SwiftUI views · QuoteEngineViewModel · DevHTTP · composition root"]
+
+    APP --> DOMAIN
+    ADAPT --> APP
+    ADAPT --> DOMAIN
+    ROOT --> APP
+    ROOT --> ADAPT
+    ROOT --> DOMAIN
+```
+
+Two driving adapters sit over the same core: `QuoteEngineViewModel` (SwiftUI) and a `#if DEBUG` HTTP control server (see [Dev HTTP control server](#dev-http-control-server)).
+
 ## Getting started
 
 Prerequisites:
@@ -48,11 +71,37 @@ Open `StockAlerts.xcodeproj` in Xcode and ⌘R. The app installs itself as a men
 ./scripts/test.sh
 ```
 
-The script wraps `xcodebuild test` with the flags this project always needs (`-allowProvisioningUpdates`, macOS arm64 destination, Debug config). Extra args forward to `xcodebuild`, e.g.:
+This runs **both layers**: the `StockAlertsKit` package (`Domain`/`Application`/`Adapters`) via `swift test` — fast and unsigned — then the app and app-target tests via `xcodebuild` (Debug, macOS arm64, `-allowProvisioningUpdates`; the signed suite keeps what needs signing/GUI, e.g. `KeychainStoreTests`). Extra args forward to `xcodebuild`, e.g.:
 
 ```bash
-./scripts/test.sh -only-testing:StockAlertsTests/KeychainStoreTests
+./scripts/test.sh -only-testing:StockAlertsTests/KeychainStoreTests   # one app suite
+swift test --package-path Packages/StockAlertsKit --filter QuoteEngineTests  # one package suite, no signing
 ```
+
+## Dev HTTP control server
+
+**Debug builds only.** The app starts a small HTTP control server on `127.0.0.1:8765` (override with `STOCKALERTS_DEV_PORT`) so you can drive and inspect the running app with `curl` — a second driving adapter over the same core the UI uses. It is compiled out of Release entirely (`#if DEBUG`), so the shipped app links no networking for it and opens no port. Bound to loopback only. See [ADR-0010](documentation/adr/0010-dev-http-control-server.md).
+
+| Method & path | Effect |
+| --- | --- |
+| `GET /state` | engine state: quotes, last error, last fetch, clock tick |
+| `GET /watchlist` | watchlist symbols |
+| `POST /watchlist` `{"symbol":"AAPL"}` | add a symbol → returns the updated list |
+| `DELETE /watchlist/{symbol}` | remove a symbol |
+| `GET /alerts?symbol=AAPL` | alerts (optionally filtered by symbol) |
+| `POST /alerts` `{"symbol","condition","threshold"}` | add an alert (`condition`: `above` / `below` / `percentChangeUp` / `percentChangeDown`) |
+| `POST /alerts/{id}/reset`, `DELETE /alerts/{id}` | reset / delete an alert |
+| `POST /tick` | force a poll (real Finnhub fetch) — the way to populate `/state` on a fresh launch |
+
+```bash
+P=8765
+curl -s localhost:$P/watchlist                                  # ["AAPL"]
+curl -s -XPOST localhost:$P/watchlist -d '{"symbol":"MSFT"}'    # ["AAPL","MSFT"]
+curl -s -XPOST localhost:$P/tick | python3 -m json.tool         # live quotes for the watchlist
+curl -s -XDELETE localhost:$P/watchlist/MSFT                    # ["AAPL"]
+```
+
+The `verifier-app` agent skill (`.claude/skills/verifier-app/`) uses this as its primary way to verify behavior at runtime.
 
 ## CI
 
@@ -66,9 +115,12 @@ A green check is required before merging. CI runs unsigned because the macOS Dev
 ## Repository layout
 
 - `project.yml` — XcodeGen source of truth for `StockAlerts.xcodeproj`
-- `StockAlerts/` — app target sources
-- `StockAlertsTests/` — Swift Testing target
-- `scripts/test.sh` — test runner wrapper
+- `Packages/StockAlertsKit/` — the hexagon as a Swift package: `Sources/{Domain,Application,Adapters}` + `Tests/{Domain,Application,Adapters}Tests`
+- `StockAlerts/` — app target: SwiftUI views, `QuoteEngineViewModel`, `StockAlertsApp` (composition root), and `DevHTTP/` (the `#if DEBUG` control server)
+- `StockAlertsTests/` — Swift Testing target for the app (signing/GUI-dependent suites)
+- `scripts/test.sh` — test runner wrapper (package + app)
+- `documentation/adr/` — Architecture Decision Records
+- `.claude/skills/verifier-app/` — runtime verification skill (drives the dev HTTP server)
 - `documentation/specifications/SPEC.md` — original design sketch
 
 ## License

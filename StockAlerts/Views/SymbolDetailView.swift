@@ -1,23 +1,21 @@
 import SwiftUI
-import SwiftData
+import Domain
+import Adapters
 
 struct SymbolDetailView: View {
     let symbol: String
 
-    @EnvironmentObject private var engine: QuoteEngine
-    @Environment(\.modelContext) private var context
-    @Query private var allAlerts: [PriceAlert]
-    @Query(sort: \WatchedSymbol.sortOrder) private var watched: [WatchedSymbol]
+    @EnvironmentObject private var viewModel: QuoteEngineViewModel
 
     @State private var newCondition: PriceAlert.Condition = .above
     @State private var newThresholdText: String = ""
 
     private var alerts: [PriceAlert] {
         let upper = symbol.uppercased()
-        return allAlerts.filter { $0.symbol == upper }
+        return viewModel.alerts.filter { $0.symbol == upper }
     }
 
-    private var quote: Quote? { engine.quotes[symbol.uppercased()] }
+    private var quote: Quote? { viewModel.quotes[symbol.uppercased()] }
 
     var body: some View {
         ScrollView {
@@ -29,8 +27,7 @@ struct SymbolDetailView: View {
                 newAlertSection
                 Divider()
                 Button(role: .destructive) {
-                    let store = WatchlistStore(context: context)
-                    store.remove(symbol)
+                    viewModel.removeSymbol(symbol)
                 } label: {
                     Label("Remove from watchlist", systemImage: "trash")
                 }
@@ -129,14 +126,12 @@ struct SymbolDetailView: View {
             Spacer()
             if alert.isTriggered {
                 Button("Reset") {
-                    let store = AlertStore(context: context)
-                    store.reset(alert)
+                    viewModel.resetAlert(id: alert.id)
                 }
                 .buttonStyle(.borderless)
             }
             Button(role: .destructive) {
-                let store = AlertStore(context: context)
-                store.remove(alert)
+                viewModel.removeAlert(id: alert.id)
             } label: {
                 Image(systemName: "trash")
             }
@@ -182,8 +177,7 @@ struct SymbolDetailView: View {
 
     private func addAlert() {
         guard let value = Double(newThresholdText) else { return }
-        let store = AlertStore(context: context)
-        store.add(PriceAlert(symbol: symbol, condition: newCondition, threshold: value))
+        viewModel.addAlert(PriceAlert(symbol: symbol, condition: newCondition, threshold: value))
         newThresholdText = ""
     }
 }

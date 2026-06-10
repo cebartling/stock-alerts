@@ -1,4 +1,5 @@
 import SwiftUI
+import Domain
 
 enum MarketStatusViewModel {
     static func make(now: Date, extended: Bool) -> (isOpen: Bool, label: String) {
@@ -27,10 +28,10 @@ struct MarketStatusBadge: View {
             }
         case .compact:
             // TimelineView inside MenuBarExtra's label freezes the SwiftUI
-            // runtime (kills xctest's runner-connect handshake). MenuBarLabel
-            // observes QuoteEngine.clockTick (a 60s heartbeat published
-            // unconditionally), so the dot still updates at the open/close
-            // boundary without TimelineView.
+            // runtime (kills xctest's runner-connect handshake). The menu-bar
+            // content observes QuoteEngineViewModel.clockTick (a 60s heartbeat
+            // the engine publishes unconditionally), so the dot still updates at
+            // the open/close boundary without TimelineView.
             let model = MarketStatusViewModel.make(now: Date(), extended: extendedHours)
             compactBody(model: model)
         }

@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import StockAlerts
+import Adapters
 
 @MainActor
 struct WatchlistStorePersistenceTests {
@@ -15,22 +15,22 @@ struct WatchlistStorePersistenceTests {
         try autoreleasepool {
             let firstConfig = ModelConfiguration(url: storeURL)
             let firstContainer = try ModelContainer(
-                for: WatchedSymbol.self, PriceAlert.self,
+                for: SymbolRecord.self, AlertRecord.self,
                 configurations: firstConfig
             )
-            let firstStore = WatchlistStore(context: firstContainer.mainContext)
-            firstStore.add("AAPL")
-            firstStore.add("MSFT")
-            #expect(firstStore.symbols == ["AAPL", "MSFT"])
+            let firstRepo = SwiftDataWatchlistRepository(context: firstContainer.mainContext)
+            firstRepo.add("AAPL")
+            firstRepo.add("MSFT")
+            #expect(firstRepo.symbols == ["AAPL", "MSFT"])
         }
 
         let secondConfig = ModelConfiguration(url: storeURL)
         let secondContainer = try ModelContainer(
-            for: WatchedSymbol.self, PriceAlert.self,
+            for: SymbolRecord.self, AlertRecord.self,
             configurations: secondConfig
         )
-        let secondStore = WatchlistStore(context: secondContainer.mainContext)
-        #expect(secondStore.symbols == ["AAPL", "MSFT"])
+        let secondRepo = SwiftDataWatchlistRepository(context: secondContainer.mainContext)
+        #expect(secondRepo.symbols == ["AAPL", "MSFT"])
     }
 
     private static func removeStoreArtifacts(at url: URL) {

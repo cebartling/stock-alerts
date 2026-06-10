@@ -1,8 +1,9 @@
 import SwiftUI
 import UserNotifications
+import Adapters
 
 struct SettingsView: View {
-    @EnvironmentObject private var engine: QuoteEngine
+    @EnvironmentObject private var viewModel: QuoteEngineViewModel
     @AppStorage(DefaultsKey.pollIntervalSeconds) private var pollIntervalSeconds: Int = 30
     @AppStorage(DefaultsKey.extendedHours) private var extendedHours: Bool = false
 
@@ -29,7 +30,7 @@ struct SettingsView: View {
                         in: 10...300,
                         step: 5)
                 .onChange(of: pollIntervalSeconds) { _, newValue in
-                    engine.pollInterval = TimeInterval(newValue)
+                    viewModel.pollInterval = TimeInterval(newValue)
                 }
                 Toggle("Include extended hours (4:00–20:00 ET)", isOn: $extendedHours)
             }

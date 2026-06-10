@@ -1,28 +1,39 @@
 import SwiftUI
 import SwiftData
+import Domain
+import Application
+import Adapters
 
 @main
 struct StockAlertsApp: App {
+    // Retained for the app's lifetime so the repositories' main context stays
+    // valid (ModelContext only weakly references its container).
     private let container: ModelContainer
-    @StateObject private var engine: QuoteEngine
+    @StateObject private var viewModel: QuoteEngineViewModel
     @State private var powerObserver: PowerObserver?
+    #if DEBUG
+    // Dev-only HTTP control server, started at launch (not in the MenuBarExtra
+    // content's .task, which only runs when the popover is first opened).
+    private let devServer: DevHTTPServer?
+    #endif
 
     init() {
         let container: ModelContainer
         do {
-            container = try ModelContainer(for: WatchedSymbol.self, PriceAlert.self)
+            container = try ModelContainer(for: SymbolRecord.self, AlertRecord.self)
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
         self.container = container
 
-        let alertStore = AlertStore(context: container.mainContext)
-        let watchlistStore = WatchlistStore(context: container.mainContext)
+        let alertRepository = SwiftDataAlertRepository(context: container.mainContext)
+        let watchlistRepository = SwiftDataWatchlistRepository(context: container.mainContext)
         let service = FinnhubQuoteService(apiKey: Secrets.finnhubKey)
         let engine = QuoteEngine(
             service: service,
-            alertStore: alertStore,
-            watchlistStore: watchlistStore,
+            alertRepository: alertRepository,
+            watchlistRepository: watchlistRepository,
+            notifications: UNUserNotificationScheduler(),
             isMarketOpen: {
                 let extended = UserDefaults.standard.bool(forKey: DefaultsKey.extendedHours)
                 return MarketClock.isOpen(at: .now, extended: extended)
@@ -31,41 +42,49 @@ struct StockAlertsApp: App {
         engine.pollInterval = TimeInterval(
             max(10, UserDefaults.standard.integer(forKey: DefaultsKey.pollIntervalSeconds))
         )
-        _engine = StateObject(wrappedValue: engine)
+        let viewModel = QuoteEngineViewModel(
+            engine: engine,
+            alertRepository: alertRepository,
+            watchlistRepository: watchlistRepository
+        )
+        _viewModel = StateObject(wrappedValue: viewModel)
+
+        #if DEBUG
+        let server = DevHTTPServer(surface: AppDevControlSurface(viewModel: viewModel))
+        try? server.start()
+        devServer = server
+        #endif
     }
 
     var body: some Scene {
         MenuBarExtra {
             MenuBarPopoverView()
-                .environmentObject(engine)
-                .modelContainer(container)
+                .environmentObject(viewModel)
                 .task {
                     await NotificationAuthorizer.requestAuthorization()
                     if powerObserver == nil {
                         powerObserver = PowerObserver(
-                            onSleep: { engine.stop() },
-                            onWake: { engine.start() }
+                            onSleep: { viewModel.stop() },
+                            onWake: { viewModel.start() }
                         )
                     }
-                    engine.start()
+                    viewModel.start()
                 }
         } label: {
             MenuBarLabel()
-                .environmentObject(engine)
-                .modelContainer(container)
+                .environmentObject(viewModel)
         }
         .menuBarExtraStyle(.window)
 
         Window("Stock Alerts", id: "main") {
             MainWindowView()
-                .environmentObject(engine)
-                .modelContainer(container)
+                .environmentObject(viewModel)
         }
         .defaultSize(width: 800, height: 520)
 
         Settings {
             SettingsView()
-                .environmentObject(engine)
+                .environmentObject(viewModel)
         }
     }
 }

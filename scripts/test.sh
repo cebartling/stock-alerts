@@ -1,12 +1,14 @@
 #!/bin/bash
-# Run the StockAlerts test suite via xcodebuild.
+# Run the full StockAlerts test suite.
 #
-# Wraps xcodebuild with the flags this project needs every time:
-#   - Debug configuration
-#   - macOS arm64 destination
-#   - -allowProvisioningUpdates so development signing can refresh as needed
+# Two layers:
+#   1. The StockAlertsKit package (Domain/Application/Adapters) via `swift test`
+#      — fast, unsigned, no Xcode project needed.
+#   2. The app + app-target tests via xcodebuild, with the flags this project
+#      needs every time (Debug, macOS arm64, -allowProvisioningUpdates so
+#      development signing can refresh — required for KeychainStoreTests).
 #
-# Extra arguments are forwarded to xcodebuild. Example — run one test:
+# Extra arguments are forwarded to xcodebuild. Example — run one app test:
 #   ./scripts/test.sh -only-testing:StockAlertsTests/KeychainStoreTests
 #
 # Requires:
@@ -41,7 +43,12 @@ EOF
 fi
 
 cd "$REPO_ROOT"
-exec xcodebuild \
+
+echo "==> Package tests (StockAlertsKit: Domain / Application / Adapters)"
+swift test --package-path Packages/StockAlertsKit
+
+echo "==> App tests (StockAlertsTests, signed)"
+xcodebuild \
     -project StockAlerts.xcodeproj \
     -scheme StockAlerts \
     -configuration Debug \

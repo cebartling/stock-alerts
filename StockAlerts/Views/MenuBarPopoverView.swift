@@ -1,10 +1,9 @@
 import SwiftUI
-import SwiftData
+import Domain
 
 struct MenuBarPopoverView: View {
-    @EnvironmentObject private var engine: QuoteEngine
+    @EnvironmentObject private var viewModel: QuoteEngineViewModel
     @Environment(\.openWindow) private var openWindow
-    @Query(sort: \WatchedSymbol.sortOrder) private var symbols: [WatchedSymbol]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -38,13 +37,13 @@ struct MenuBarPopoverView: View {
 
             Divider()
 
-            if symbols.isEmpty {
+            if viewModel.watchlist.isEmpty {
                 Text("No symbols yet.")
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
                 VStack(spacing: 4) {
-                    ForEach(symbols) { item in
+                    ForEach(viewModel.watchlist) { item in
                         row(for: item)
                     }
                 }
@@ -52,7 +51,7 @@ struct MenuBarPopoverView: View {
 
             Divider()
             HStack {
-                LastUpdatedLabel(date: engine.lastSuccessfulFetch)
+                LastUpdatedLabel(date: viewModel.lastSuccessfulFetch)
                 Spacer()
                 Button("Quit Stock Alerts") { NSApp.terminate(nil) }
                     .buttonStyle(.borderless)
@@ -67,7 +66,7 @@ struct MenuBarPopoverView: View {
         HStack {
             Text(item.symbol).fontWeight(.medium)
             Spacer()
-            if let quote = engine.quotes[item.symbol] {
+            if let quote = viewModel.quotes[item.symbol] {
                 Text(String(format: "%.2f", quote.price)).monospacedDigit()
                 Text(String(format: "%+.2f%%", quote.changePercent))
                     .font(.caption)

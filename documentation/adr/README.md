@@ -14,5 +14,7 @@ ADRs are immutable once merged. If a later decision overrides an earlier one, ad
 | 0004 | [Data Protection Keychain for secret storage](0004-data-protection-keychain.md)           | Accepted |
 | 0005 | [MenuBar popover + separate Window scene, Dock icon hidden](0005-menu-bar-and-window.md)  | Accepted |
 | 0006 | [Dependency-injected seams on `QuoteEngine`](0006-quote-engine-injection-seams.md)        | Accepted |
-| 0007 | [SwiftData `@Query` reads + `@MainActor` store writes](0007-swiftdata-read-write-split.md) | Accepted |
+| 0007 | [SwiftData `@Query` reads + `@MainActor` store writes](0007-swiftdata-read-write-split.md) | Superseded by [0009](0009-hexagonal-architecture.md) |
 | 0008 | [Poll Finnhub on a timer; no websocket](0008-polling-over-websocket.md)                   | Accepted |
+| 0009 | [Hexagonal architecture with compiler-enforced SPM modules](0009-hexagonal-architecture.md) | Accepted |
+| 0010 | [Dev-only HTTP control server](0010-dev-http-control-server.md)                           | Accepted |

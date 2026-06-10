@@ -1,6 +1,6 @@
 # ADR-0007: SwiftData `@Query` reads + `@MainActor` store writes
 
-- **Status**: Accepted
+- **Status**: Superseded by [ADR-0009](0009-hexagonal-architecture.md)
 - **Date**: 2026-04-23
 
 ## Context
