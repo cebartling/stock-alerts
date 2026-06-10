@@ -53,6 +53,9 @@ targets:
       properties:
         com.apple.security.app-sandbox: YES
         com.apple.security.network.client: YES
+        # Dev-only HTTP control server (NWListener) needs the listen entitlement.
+        # All server code is gated behind #if DEBUG, so Release opens no port.
+        com.apple.security.network.server: YES
         keychain-access-groups:
           - $(AppIdentifierPrefix)com.pintailconsultingllc.StockAlerts
     settings:
