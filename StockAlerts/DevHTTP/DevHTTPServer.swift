@@ -31,7 +31,10 @@ final class DevHTTPServer: @unchecked Sendable {
     func start() throws {
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
-        let listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
+        // Bind loopback only at the kernel level (the per-connection isLoopback
+        // check below stays as defense-in-depth).
+        params.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!)
+        let listener = try NWListener(using: params)
         let port = self.port
         listener.stateUpdateHandler = { state in
             switch state {
