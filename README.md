@@ -80,7 +80,7 @@ swift test --package-path Packages/StockAlertsKit --filter QuoteEngineTests  # o
 
 ## Release
 
-To produce a shareable build, `./scripts/release.sh` runs the full Apple distribution chain — `xcodebuild archive` → export (Developer ID) → `notarytool` → staple → `create-dmg` → staple — and drops a **notarized, stapled** `dist/StockAlerts-<version>.dmg` that opens with no Gatekeeper warning on any Mac. It's local-only and needs a paid Developer Program team: a Developer ID Application certificate plus a saved notary credential profile. One-time setup and the runbook live in [`documentation/release.md`](documentation/release.md). The version comes from `MARKETING_VERSION` in `project.yml`, and `build/`/`dist/` are gitignored.
+To produce a shareable build, `./scripts/release.sh` runs the full Apple distribution chain — `xcodebuild archive` → export (Developer ID) → `notarytool` → staple → `create-dmg` → staple — and drops a **notarized, stapled** `dist/StockAlerts-<version>.dmg` that opens with no Gatekeeper warning on any Mac. It's local-only and needs a paid Developer Program team: a Developer ID Application certificate plus a saved notary credential profile. One-time setup and the runbook live in [`documentation/release.md`](documentation/release.md). The version comes from `MARKETING_VERSION` in `project.yml`, and `build/`/`dist/` are gitignored. The DMG is distributed through this repo's [GitHub Releases](https://github.com/cebartling/stock-alerts/releases) — notarized and stapled, so it downloads and opens with no Gatekeeper warning.
 
 ## Dev HTTP control server
 

@@ -102,6 +102,32 @@ Then mount it (`open dist/StockAlerts-<version>.dmg`), drag **StockAlerts.app**
 onto **Applications**, launch from Spotlight, and confirm the menu-bar icon
 appears with no Gatekeeper or keychain-access-group errors.
 
+## Distribute via GitHub Releases
+
+The DMG is shared through this repo's **Releases** page. Because it's notarized
+**and** stapled, the staple travels inside the file — Gatekeeper validates it
+offline, so anyone who downloads it gets a clean "drag to Applications" with no
+warning and no "unidentified developer" prompt.
+
+Tag the release `v<version>`, matching `MARKETING_VERSION` in `project.yml`, and
+attach the DMG (requires `gh auth login` once):
+
+```bash
+gh release create v0.1.0 \
+    dist/StockAlerts-0.1.0.dmg \
+    --title "StockAlerts 0.1.0" \
+    --notes "What's new in this release…"
+```
+
+The DMG appears as a downloadable asset on the release. For a staging cut, add
+`--draft` (publish later from the GitHub UI) or `--prerelease`.
+
+> Automating this on a `v*` tag push (a `release.yml` GitHub Actions workflow) is
+> a tracked follow-up — see the note in [`ci-secrets.md`](ci-secrets.md).
+> Developer ID signing isn't device-pinned the way the Development profile is, so
+> a signed release job is feasible on GitHub-hosted runners (unlike the unsigned
+> test job).
+
 ## Troubleshooting
 
 - **First archive fails: "No Developer ID Application provisioning profile."**
