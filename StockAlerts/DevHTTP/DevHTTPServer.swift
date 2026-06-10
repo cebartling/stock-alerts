@@ -112,8 +112,9 @@ final class DevHTTPServer: @unchecked Sendable {
 }
 
 /// A fully-received HTTP request (request line + headers + Content-Length body).
-/// `init?` returns nil while more bytes are still needed.
-private struct ParsedRequest {
+/// `init?` returns nil while more bytes are still needed. Internal (not private)
+/// so `ParsedRequestTests` can exercise the framing edge cases directly.
+struct ParsedRequest {
     let method: String
     let path: String
     let body: Data
