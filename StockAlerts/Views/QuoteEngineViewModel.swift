@@ -35,6 +35,11 @@ final class QuoteEngineViewModel: ObservableObject {
             self.lastError = state.lastError
             self.lastSuccessfulFetch = state.lastSuccessfulFetch
             self.clockTick = state.clockTick
+            // The poll loop fires alerts via the engine (markTriggered), not a
+            // view-model method, so re-read the repository-backed lists here too
+            // — otherwise a fired alert's UI state stays stale (this replaces
+            // SwiftData @Query's automatic invalidation). See ADR-0009/0010.
+            self.refresh()
         }
         refresh()
     }
