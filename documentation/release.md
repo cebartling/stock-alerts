@@ -58,8 +58,8 @@ and notarization (the free Personal Team used for local testing can't do this).
    ```bash
    xcrun notarytool store-credentials stockalerts-notary \
        --apple-id you@example.com \
-       --team-id RDD45JXSRK \
-       --password abcd-efgh-ijkl-mnop
+       --team-id YOUR_TEAM_ID \
+       --password abcd-efgh-ijkl-mnop   # YOUR_TEAM_ID = DEVELOPMENT_TEAM from Local.xcconfig
    ```
 
    Either way the credential lives in the keychain; the script only ever names
