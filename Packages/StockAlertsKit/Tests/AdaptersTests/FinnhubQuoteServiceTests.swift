@@ -1,8 +1,11 @@
 import Testing
 import Foundation
 import Domain
-@testable import StockAlerts
+import Adapters
 
+// Serialized: these tests share StubURLProtocol's static `requestHandler`, so
+// they must not run concurrently (swift test parallelizes suites by default).
+@Suite(.serialized)
 struct FinnhubQuoteServiceTests {
 
     private func http(_ url: URL, _ status: Int) -> HTTPURLResponse {

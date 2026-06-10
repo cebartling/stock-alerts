@@ -1,16 +1,20 @@
 import Foundation
 import Security
 
-struct KeychainStore {
-    let service: String
-    let account: String
+/// Generic Keychain wrapper. Every SecItem call routes through
+/// `kSecUseDataProtectionKeychain: true`, which requires the app to declare
+/// `keychain-access-groups` and be signed with a real development certificate
+/// (ad-hoc signing fails at codesign time).
+public struct KeychainStore {
+    public let service: String
+    public let account: String
 
-    init(service: String, account: String = "default") {
+    public init(service: String, account: String = "default") {
         self.service = service
         self.account = account
     }
 
-    func read() -> String {
+    public func read() -> String {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -30,7 +34,7 @@ struct KeychainStore {
         return string
     }
 
-    func write(_ value: String) {
+    public func write(_ value: String) {
         // Empty string means "no key stored" — delete the entry.
         guard !value.isEmpty else {
             delete()
@@ -53,7 +57,7 @@ struct KeychainStore {
         }
     }
 
-    func delete() {
+    public func delete() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -64,12 +68,13 @@ struct KeychainStore {
     }
 }
 
-enum Secrets {
+/// Read/write wrapper for the production Finnhub API key.
+public enum Secrets {
     private static let finnhubStore = KeychainStore(
         service: "com.pintailconsultingllc.StockAlerts.finnhub"
     )
 
-    static var finnhubKey: String {
+    public static var finnhubKey: String {
         get { finnhubStore.read() }
         set { finnhubStore.write(newValue) }
     }

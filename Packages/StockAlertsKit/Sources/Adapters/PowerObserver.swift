@@ -1,12 +1,14 @@
 import Foundation
 import AppKit
 
+/// Bridges macOS sleep/wake notifications to callbacks, so the app can pause
+/// polling on sleep and resume on wake.
 @MainActor
-final class PowerObserver {
+public final class PowerObserver {
     private var sleepToken: NSObjectProtocol?
     private var wakeToken: NSObjectProtocol?
 
-    init(onSleep: @escaping @MainActor () -> Void, onWake: @escaping @MainActor () -> Void) {
+    public init(onSleep: @escaping @MainActor () -> Void, onWake: @escaping @MainActor () -> Void) {
         let center = NSWorkspace.shared.notificationCenter
         sleepToken = center.addObserver(
             forName: NSWorkspace.willSleepNotification,

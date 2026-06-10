@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import AppKit
-@testable import StockAlerts
+import Adapters
 
 @MainActor
 struct PowerObserverTests {

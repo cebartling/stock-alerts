@@ -1,17 +1,21 @@
 import Foundation
 import Domain
 
-actor FinnhubQuoteService: QuoteService {
+/// Production `QuoteService` adapter backed by the Finnhub REST API.
+///
+/// Takes `session: URLSession = .shared` so tests can pass a session backed by
+/// a stub URLProtocol and exercise the parsing/error mapping without the network.
+public actor FinnhubQuoteService: QuoteService {
     private let apiKey: String
     private let session: URLSession
     private let base = URL(string: "https://finnhub.io/api/v1")!
 
-    init(apiKey: String, session: URLSession = .shared) {
+    public init(apiKey: String, session: URLSession = .shared) {
         self.apiKey = apiKey
         self.session = session
     }
 
-    func fetchQuote(symbol: String) async throws -> Quote {
+    public func fetchQuote(symbol: String) async throws -> Quote {
         var components = URLComponents(
             url: base.appending(path: "quote"),
             resolvingAgainstBaseURL: false
@@ -57,7 +61,7 @@ actor FinnhubQuoteService: QuoteService {
         )
     }
 
-    func fetchQuotes(symbols: [String]) async throws -> [Quote] {
+    public func fetchQuotes(symbols: [String]) async throws -> [Quote] {
         try await withThrowingTaskGroup(of: Quote.self) { group in
             for symbol in symbols {
                 group.addTask { try await self.fetchQuote(symbol: symbol) }

@@ -1,28 +1,32 @@
 import Foundation
 import AppKit
 
+/// Port for opening URLs, so the launcher can be tested without hitting the
+/// system Stocks app.
 @MainActor
-protocol URLOpening {
+public protocol URLOpening {
     func open(_ url: URL)
 }
 
-struct NSWorkspaceURLOpener: URLOpening {
-    func open(_ url: URL) {
+public struct NSWorkspaceURLOpener: URLOpening {
+    public init() {}
+    public func open(_ url: URL) {
         NSWorkspace.shared.open(url)
     }
 }
 
+/// Opens Apple's Stocks app at a given symbol via the `stocks://` URL scheme.
 @MainActor
-struct StocksAppLauncher {
-    static let shared = StocksAppLauncher(opener: NSWorkspaceURLOpener())
+public struct StocksAppLauncher {
+    public static let shared = StocksAppLauncher(opener: NSWorkspaceURLOpener())
 
     private let opener: URLOpening
 
-    init(opener: URLOpening) {
+    public init(opener: URLOpening) {
         self.opener = opener
     }
 
-    func open(symbol: String) {
+    public func open(symbol: String) {
         let normalized = symbol
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()

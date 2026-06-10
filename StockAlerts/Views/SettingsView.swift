@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import Adapters
 
 struct SettingsView: View {
     @EnvironmentObject private var viewModel: QuoteEngineViewModel

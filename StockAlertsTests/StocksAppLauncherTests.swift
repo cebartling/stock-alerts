@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import StockAlerts
+import Adapters
 
 @MainActor
 struct StocksAppLauncherTests {
