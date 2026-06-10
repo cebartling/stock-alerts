@@ -87,9 +87,12 @@ a `@Model` directly.
   fast); the signed app suite (`xcodebuild`) keeps only what needs signing or the GUI (e.g.
   `KeychainStoreTests`). `./scripts/test.sh` runs both; CI runs the package tests too.
 - **`QuoteEngineViewModel.refresh()` replaces `@Query` auto-update.** With SwiftData hidden behind
-  repositories, the view-model re-reads the lists after every mutation and republishes. This is the
-  main behavioral trade-off (it reverses [ADR-0007](0007-swiftdata-read-write-split.md)): route every
-  watchlist/alert write through a `QuoteEngineViewModel` method, not a repository call from a view.
+  repositories, the view-model re-reads the lists and republishes — both after every view-model
+  mutation **and** on every engine `onStateChange` (so alerts the *poll loop* fires via
+  `markTriggered` also update live; mutating-via-the-view-model alone is not enough, since the poll
+  path doesn't call a view-model method). This is the main behavioral trade-off (it reverses
+  [ADR-0007](0007-swiftdata-read-write-split.md)): route every watchlist/alert write through a
+  `QuoteEngineViewModel` method, not a repository call from a view.
 - **The boundary is provable.** Adding `import SwiftUI` to a `Domain` file fails `swiftlint --strict`;
   adding `import Adapters` fails to compile. Future refactors can't silently re-leak.
 - The `ModelContext`/`ModelContainer` lifetime gotcha from
