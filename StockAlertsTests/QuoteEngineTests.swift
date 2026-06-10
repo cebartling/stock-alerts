@@ -1,19 +1,10 @@
 import Testing
 import Foundation
-import SwiftData
 import Domain
 @testable import StockAlerts
 
 @MainActor
 struct QuoteEngineTests {
-    private let container: ModelContainer
-    private let context: ModelContext
-
-    init() throws {
-        let pair = try TestHelpers.makeInMemoryContainer()
-        self.container = pair.container
-        self.context = pair.context
-    }
 
     // MARK: - helpers
 
@@ -29,48 +20,61 @@ struct QuoteEngineTests {
         )
     }
 
+    private struct Harness {
+        let engine: QuoteEngine
+        let scheduler: FakeNotificationScheduler
+        let service: FakeQuoteService
+        let alerts: FakeAlertRepository
+        let watchlist: FakeWatchlistRepository
+    }
+
     private func makeEngine(
         quotes: Result<[Quote], QuoteServiceError> = .success([]),
         isMarketOpen: @escaping @Sendable () -> Bool = { true },
         now: @escaping @Sendable () -> Date = { Date() }
-    ) -> (engine: QuoteEngine, scheduler: FakeNotificationScheduler, service: FakeQuoteService) {
+    ) -> Harness {
         let service = FakeQuoteService(result: quotes)
         let scheduler = FakeNotificationScheduler()
-        let alertStore = AlertStore(context: context)
-        let watchlistStore = WatchlistStore(context: context)
+        let alerts = FakeAlertRepository()
+        let watchlist = FakeWatchlistRepository()
         let engine = QuoteEngine(
             service: service,
-            alertStore: alertStore,
-            watchlistStore: watchlistStore,
+            alertRepository: alerts,
+            watchlistRepository: watchlist,
             notifications: scheduler,
             isMarketOpen: isMarketOpen,
             now: now
         )
-        return (engine, scheduler, service)
+        return Harness(engine: engine, scheduler: scheduler, service: service, alerts: alerts, watchlist: watchlist)
+    }
+
+    /// Re-fetch an alert's triggered state from the repository (value types
+    /// mean the local copy passed to `add` never mutates).
+    private func isTriggered(_ id: UUID, in repo: FakeAlertRepository, symbol: String) -> Bool {
+        repo.alerts(for: symbol).first { $0.id == id }?.isTriggered ?? false
     }
 
     // MARK: - market hours gating
 
     @Test
     func tick_outsideMarketHours_doesNothing() async {
-        let watchlist = WatchlistStore(context: context)
-        watchlist.add("AAPL")
-        let (engine, scheduler, _) = makeEngine(
+        let h = makeEngine(
             quotes: .success([makeQuote("AAPL", price: 123)]),
             isMarketOpen: { false }
         )
-        await engine.tick()
-        #expect(engine.quotes.isEmpty)
-        #expect(scheduler.scheduled.isEmpty)
+        h.watchlist.add("AAPL")
+        await h.engine.tick()
+        #expect(h.engine.quotes.isEmpty)
+        #expect(h.scheduler.scheduled.isEmpty)
     }
 
     @Test
     func tick_duringMarketHours_emptyWatchlist_skipsFetch() async {
         // No watched symbols; should not call service at all and not populate quotes.
-        let (engine, _, service) = makeEngine(quotes: .success([makeQuote("AAPL", price: 1)]))
-        await engine.tick()
-        #expect(engine.quotes.isEmpty)
-        let callCount = await service.callCount
+        let h = makeEngine(quotes: .success([makeQuote("AAPL", price: 1)]))
+        await h.engine.tick()
+        #expect(h.engine.quotes.isEmpty)
+        let callCount = await h.service.callCount
         #expect(callCount == 0)
     }
 
@@ -78,115 +82,86 @@ struct QuoteEngineTests {
 
     @Test
     func tick_populatesQuotesByCaching() async {
-        let watchlist = WatchlistStore(context: context)
-        watchlist.add("AAPL")
-        watchlist.add("MSFT")
-        let (engine, _, _) = makeEngine(
+        let h = makeEngine(
             quotes: .success([
                 makeQuote("AAPL", price: 111),
                 makeQuote("MSFT", price: 222),
             ])
         )
-        await engine.tick()
-        #expect(engine.quotes["AAPL"]?.price == 111)
-        #expect(engine.quotes["MSFT"]?.price == 222)
+        h.watchlist.add("AAPL")
+        h.watchlist.add("MSFT")
+        await h.engine.tick()
+        #expect(h.engine.quotes["AAPL"]?.price == 111)
+        #expect(h.engine.quotes["MSFT"]?.price == 222)
     }
 
     // MARK: - alerts
 
     @Test
     func tick_firesMatchingAlert() async {
-        let watchlist = WatchlistStore(context: context)
-        watchlist.add("AAPL")
-        let alertStore = AlertStore(context: context)
+        let h = makeEngine(quotes: .success([makeQuote("AAPL", price: 150)]))
+        h.watchlist.add("AAPL")
         let alert = PriceAlert(symbol: "AAPL", condition: .above, threshold: 100)
-        alertStore.add(alert)
+        h.alerts.add(alert)
 
-        let service = FakeQuoteService(result: .success([makeQuote("AAPL", price: 150)]))
-        let scheduler = FakeNotificationScheduler()
-        let engine = QuoteEngine(
-            service: service,
-            alertStore: alertStore,
-            watchlistStore: watchlist,
-            notifications: scheduler,
-            isMarketOpen: { true }
-        )
+        await h.engine.tick()
 
-        await engine.tick()
-
-        #expect(scheduler.scheduled.count == 1)
-        #expect(scheduler.scheduled.first?.id == alert.id.uuidString)
-        #expect(alert.isTriggered == true)
-        #expect(alert.triggeredAt != nil)
+        #expect(h.scheduler.scheduled.count == 1)
+        #expect(h.scheduler.scheduled.first?.id == alert.id.uuidString)
+        let fired = h.alerts.alerts(for: "AAPL").first { $0.id == alert.id }
+        #expect(fired?.isTriggered == true)
+        #expect(fired?.triggeredAt != nil)
     }
 
     @Test
     func tick_nonMatchingAlert_doesNotFire() async {
-        let watchlist = WatchlistStore(context: context)
-        watchlist.add("AAPL")
-        let alertStore = AlertStore(context: context)
-        alertStore.add(PriceAlert(symbol: "AAPL", condition: .above, threshold: 200))
+        let h = makeEngine(quotes: .success([makeQuote("AAPL", price: 150)]))
+        h.watchlist.add("AAPL")
+        h.alerts.add(PriceAlert(symbol: "AAPL", condition: .above, threshold: 200))
 
-        let (engine, scheduler, _) = makeEngine(
-            quotes: .success([makeQuote("AAPL", price: 150)])
-        )
+        await h.engine.tick()
 
-        await engine.tick()
-
-        #expect(scheduler.scheduled.isEmpty)
+        #expect(h.scheduler.scheduled.isEmpty)
     }
 
     @Test
     func tick_alreadyTriggeredAlert_doesNotRefire() async {
-        let watchlist = WatchlistStore(context: context)
-        watchlist.add("AAPL")
-        let alertStore = AlertStore(context: context)
+        let h = makeEngine(quotes: .success([makeQuote("AAPL", price: 150)]))
+        h.watchlist.add("AAPL")
         let alert = PriceAlert(symbol: "AAPL", condition: .above, threshold: 100)
-        alertStore.add(alert)
-        alertStore.markTriggered(alert)
+        h.alerts.add(alert)
+        h.alerts.markTriggered(id: alert.id)
 
-        let service = FakeQuoteService(result: .success([makeQuote("AAPL", price: 150)]))
-        let scheduler = FakeNotificationScheduler()
-        let engine = QuoteEngine(
-            service: service,
-            alertStore: alertStore,
-            watchlistStore: watchlist,
-            notifications: scheduler,
-            isMarketOpen: { true }
-        )
+        await h.engine.tick()
 
-        await engine.tick()
-
-        #expect(scheduler.scheduled.isEmpty)
+        #expect(h.scheduler.scheduled.isEmpty)
     }
 
     // MARK: - errors
 
     @Test
     func tick_serviceError_capturedAsLastError() async {
-        let watchlist = WatchlistStore(context: context)
-        watchlist.add("AAPL")
-        let (engine, _, _) = makeEngine(quotes: .failure(.rateLimited))
+        let h = makeEngine(quotes: .failure(.rateLimited))
+        h.watchlist.add("AAPL")
 
-        await engine.tick()
+        await h.engine.tick()
 
-        if case .rateLimited = engine.lastError {
+        if case .rateLimited = h.engine.lastError {
             // ok
         } else {
-            Issue.record("Expected rateLimited, got \(String(describing: engine.lastError))")
+            Issue.record("Expected rateLimited, got \(String(describing: h.engine.lastError))")
         }
     }
 
     @Test
     func tick_nonQuoteServiceError_wrappedAsNetwork() async {
-        let watchlist = WatchlistStore(context: context)
+        let watchlist = FakeWatchlistRepository()
         watchlist.add("AAPL")
-        let alertStore = AlertStore(context: context)
         let service = GenericThrowingQuoteService(error: URLError(.notConnectedToInternet))
         let engine = QuoteEngine(
             service: service,
-            alertStore: alertStore,
-            watchlistStore: watchlist,
+            alertRepository: FakeAlertRepository(),
+            watchlistRepository: watchlist,
             notifications: FakeNotificationScheduler(),
             isMarketOpen: { true }
         )
@@ -205,83 +180,59 @@ struct QuoteEngineTests {
 
     @Test
     func tick_multipleAlertsOnSameSymbol_firesEachMatchIndependently() async {
-        let watchlist = WatchlistStore(context: context)
-        watchlist.add("AAPL")
-        let alertStore = AlertStore(context: context)
+        let h = makeEngine(quotes: .success([makeQuote("AAPL", price: 170)]))
+        h.watchlist.add("AAPL")
         let above100 = PriceAlert(symbol: "AAPL", condition: .above, threshold: 100)
         let above160 = PriceAlert(symbol: "AAPL", condition: .above, threshold: 160)
         let above200 = PriceAlert(symbol: "AAPL", condition: .above, threshold: 200)
-        alertStore.add(above100)
-        alertStore.add(above160)
-        alertStore.add(above200)
+        h.alerts.add(above100)
+        h.alerts.add(above160)
+        h.alerts.add(above200)
 
         // Price 170 straddles the thresholds: 170>=100 ✓, 170>=160 ✓, 170>=200 ✗.
-        let service = FakeQuoteService(result: .success([makeQuote("AAPL", price: 170)]))
-        let scheduler = FakeNotificationScheduler()
-        let engine = QuoteEngine(
-            service: service,
-            alertStore: alertStore,
-            watchlistStore: watchlist,
-            notifications: scheduler,
-            isMarketOpen: { true }
-        )
+        await h.engine.tick()
 
-        await engine.tick()
-
-        #expect(scheduler.scheduled.count == 2)
-        let firedIds = Set(scheduler.scheduled.map(\.id))
+        #expect(h.scheduler.scheduled.count == 2)
+        let firedIds = Set(h.scheduler.scheduled.map(\.id))
         #expect(firedIds.contains(above100.id.uuidString))
         #expect(firedIds.contains(above160.id.uuidString))
         #expect(!firedIds.contains(above200.id.uuidString))
-        #expect(above100.isTriggered == true)
-        #expect(above160.isTriggered == true)
-        #expect(above200.isTriggered == false)
+        #expect(isTriggered(above100.id, in: h.alerts, symbol: "AAPL") == true)
+        #expect(isTriggered(above160.id, in: h.alerts, symbol: "AAPL") == true)
+        #expect(isTriggered(above200.id, in: h.alerts, symbol: "AAPL") == false)
     }
 
     @Test
     func tick_multipleSymbols_onlyMatchingOnesFireAlerts() async {
-        let watchlist = WatchlistStore(context: context)
-        watchlist.add("AAPL")
-        watchlist.add("MSFT")
-        let alertStore = AlertStore(context: context)
-        let aaplAlert = PriceAlert(symbol: "AAPL", condition: .above, threshold: 100)
-        let msftAlert = PriceAlert(symbol: "MSFT", condition: .below, threshold: 50)  // won't match
-        alertStore.add(aaplAlert)
-        alertStore.add(msftAlert)
-
-        let service = FakeQuoteService(result: .success([
+        let h = makeEngine(quotes: .success([
             makeQuote("AAPL", price: 200),
             makeQuote("MSFT", price: 300),
         ]))
-        let scheduler = FakeNotificationScheduler()
-        let engine = QuoteEngine(
-            service: service,
-            alertStore: alertStore,
-            watchlistStore: watchlist,
-            notifications: scheduler,
-            isMarketOpen: { true }
-        )
+        h.watchlist.add("AAPL")
+        h.watchlist.add("MSFT")
+        let aaplAlert = PriceAlert(symbol: "AAPL", condition: .above, threshold: 100)
+        let msftAlert = PriceAlert(symbol: "MSFT", condition: .below, threshold: 50)  // won't match
+        h.alerts.add(aaplAlert)
+        h.alerts.add(msftAlert)
 
-        await engine.tick()
+        await h.engine.tick()
 
-        #expect(scheduler.scheduled.count == 1)
-        #expect(scheduler.scheduled.first?.id == aaplAlert.id.uuidString)
-        #expect(aaplAlert.isTriggered == true)
-        #expect(msftAlert.isTriggered == false)
+        #expect(h.scheduler.scheduled.count == 1)
+        #expect(h.scheduler.scheduled.first?.id == aaplAlert.id.uuidString)
+        #expect(isTriggered(aaplAlert.id, in: h.alerts, symbol: "AAPL") == true)
+        #expect(isTriggered(msftAlert.id, in: h.alerts, symbol: "MSFT") == false)
     }
 
     @Test
     func tick_successAfterError_clearsLastError() async {
-        let watchlist = WatchlistStore(context: context)
+        let watchlist = FakeWatchlistRepository()
         watchlist.add("AAPL")
-        let alertStore = AlertStore(context: context)
-        let scheduler = FakeNotificationScheduler()
         let service = ToggleableQuoteService(initialResult: .failure(.rateLimited))
         let engine = QuoteEngine(
             service: service,
-            alertStore: alertStore,
-            watchlistStore: watchlist,
-            notifications: scheduler,
+            alertRepository: FakeAlertRepository(),
+            watchlistRepository: watchlist,
+            notifications: FakeNotificationScheduler(),
             isMarketOpen: { true }
         )
 
@@ -301,41 +252,38 @@ struct QuoteEngineTests {
 
     @Test
     func lastSuccessfulFetch_isNil_beforeFirstTick() {
-        let (engine, _, _) = makeEngine()
-        #expect(engine.lastSuccessfulFetch == nil)
+        let h = makeEngine()
+        #expect(h.engine.lastSuccessfulFetch == nil)
     }
 
     @Test
     func tick_setsLastSuccessfulFetch_onSuccess() async {
-        let watchlist = WatchlistStore(context: context)
-        watchlist.add("AAPL")
         let fixed = Date(timeIntervalSince1970: 1_700_000_000)
-        let (engine, _, _) = makeEngine(
+        let h = makeEngine(
             quotes: .success([makeQuote("AAPL", price: 100)]),
             now: { fixed }
         )
+        h.watchlist.add("AAPL")
 
-        await engine.tick()
+        await h.engine.tick()
 
-        #expect(engine.lastSuccessfulFetch == fixed)
+        #expect(h.engine.lastSuccessfulFetch == fixed)
     }
 
     @Test
     func tick_preservesLastSuccessfulFetch_acrossErrorAfterSuccess() async {
-        let watchlist = WatchlistStore(context: context)
+        let watchlist = FakeWatchlistRepository()
         watchlist.add("AAPL")
-        let alertStore = AlertStore(context: context)
-        let scheduler = FakeNotificationScheduler()
         let service = ToggleableQuoteService(
             initialResult: .success([makeQuote("AAPL", price: 100)])
         )
         let firstSuccess = Date(timeIntervalSince1970: 1_700_000_000)
-        var nowValue = firstSuccess
+        nonisolated(unsafe) var nowValue = firstSuccess
         let engine = QuoteEngine(
             service: service,
-            alertStore: alertStore,
-            watchlistStore: watchlist,
-            notifications: scheduler,
+            alertRepository: FakeAlertRepository(),
+            watchlistRepository: watchlist,
+            notifications: FakeNotificationScheduler(),
             isMarketOpen: { true },
             now: { nowValue }
         )
@@ -354,44 +302,40 @@ struct QuoteEngineTests {
 
     @Test
     func tick_outsideMarketHours_doesNotSetLastSuccessfulFetch() async {
-        let watchlist = WatchlistStore(context: context)
-        watchlist.add("AAPL")
-        let (engine, _, _) = makeEngine(
+        let h = makeEngine(
             quotes: .success([makeQuote("AAPL", price: 100)]),
             isMarketOpen: { false },
             now: { Date(timeIntervalSince1970: 1_700_000_000) }
         )
+        h.watchlist.add("AAPL")
 
-        await engine.tick()
+        await h.engine.tick()
 
-        #expect(engine.lastSuccessfulFetch == nil)
+        #expect(h.engine.lastSuccessfulFetch == nil)
     }
 
     @Test
     func tick_emptyWatchlist_doesNotSetLastSuccessfulFetch() async {
         // No symbols added — service is never called, so a fetch did not actually happen.
-        let (engine, _, _) = makeEngine(
+        let h = makeEngine(
             quotes: .success([]),
             now: { Date(timeIntervalSince1970: 1_700_000_000) }
         )
 
-        await engine.tick()
+        await h.engine.tick()
 
-        #expect(engine.lastSuccessfulFetch == nil)
+        #expect(h.engine.lastSuccessfulFetch == nil)
     }
 
     @Test
     func tick_populatesQuoteCacheEvenWhenNoAlertMatches() async {
-        let watchlist = WatchlistStore(context: context)
-        watchlist.add("AAPL")
-        let (engine, scheduler, _) = makeEngine(
-            quotes: .success([makeQuote("AAPL", price: 150)])
-        )
+        let h = makeEngine(quotes: .success([makeQuote("AAPL", price: 150)]))
+        h.watchlist.add("AAPL")
 
-        await engine.tick()
+        await h.engine.tick()
 
-        #expect(engine.quotes["AAPL"]?.price == 150)
-        #expect(scheduler.scheduled.isEmpty)
+        #expect(h.engine.quotes["AAPL"]?.price == 150)
+        #expect(h.scheduler.scheduled.isEmpty)
     }
 
     // MARK: - clockTick (UI re-render heartbeat)
@@ -399,31 +343,31 @@ struct QuoteEngineTests {
     @Test
     func clockTick_initializedFromNowClosure() {
         let fixed = Date(timeIntervalSince1970: 1_800_000_000)
-        let (engine, _, _) = makeEngine(now: { fixed })
-        #expect(engine.clockTick == fixed)
+        let h = makeEngine(now: { fixed })
+        #expect(h.engine.clockTick == fixed)
     }
 
     @Test
     func tickClock_advancesClockTickToCurrentNow() {
-        var nowValue = Date(timeIntervalSince1970: 1_800_000_000)
-        let (engine, _, _) = makeEngine(now: { nowValue })
+        nonisolated(unsafe) var nowValue = Date(timeIntervalSince1970: 1_800_000_000)
+        let h = makeEngine(now: { nowValue })
         nowValue = Date(timeIntervalSince1970: 1_800_000_060)
-        engine.tickClock()
-        #expect(engine.clockTick == Date(timeIntervalSince1970: 1_800_000_060))
+        h.engine.tickClock()
+        #expect(h.engine.clockTick == Date(timeIntervalSince1970: 1_800_000_060))
     }
 
     @Test
     func tickClock_runsRegardlessOfMarketHours() {
         // The whole point: this heartbeat must fire even when the market is
         // closed, so views like MenuBarLabel re-render at the open boundary.
-        var nowValue = Date(timeIntervalSince1970: 1_800_000_000)
-        let (engine, _, _) = makeEngine(
+        nonisolated(unsafe) var nowValue = Date(timeIntervalSince1970: 1_800_000_000)
+        let h = makeEngine(
             isMarketOpen: { false },
             now: { nowValue }
         )
         nowValue = Date(timeIntervalSince1970: 1_800_000_060)
-        engine.tickClock()
-        #expect(engine.clockTick == Date(timeIntervalSince1970: 1_800_000_060))
+        h.engine.tickClock()
+        #expect(h.engine.clockTick == Date(timeIntervalSince1970: 1_800_000_060))
     }
 }
 

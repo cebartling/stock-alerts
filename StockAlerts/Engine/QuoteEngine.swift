@@ -13,8 +13,8 @@ final class QuoteEngine: ObservableObject {
     @Published private(set) var clockTick: Date
 
     private let service: QuoteService
-    private let alertStore: AlertStore
-    private let watchlistStore: WatchlistStore
+    private let alertRepository: AlertRepository
+    private let watchlistRepository: WatchlistRepository
     private let notifications: NotificationScheduler
     private let isMarketOpen: @Sendable () -> Bool
     private let now: @Sendable () -> Date
@@ -26,15 +26,15 @@ final class QuoteEngine: ObservableObject {
 
     init(
         service: QuoteService,
-        alertStore: AlertStore,
-        watchlistStore: WatchlistStore,
+        alertRepository: AlertRepository,
+        watchlistRepository: WatchlistRepository,
         notifications: NotificationScheduler = UNUserNotificationScheduler(),
         isMarketOpen: @escaping @Sendable () -> Bool = { MarketClock.isOpen(at: .now) },
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.service = service
-        self.alertStore = alertStore
-        self.watchlistStore = watchlistStore
+        self.alertRepository = alertRepository
+        self.watchlistRepository = watchlistRepository
         self.notifications = notifications
         self.isMarketOpen = isMarketOpen
         self.now = now
@@ -72,7 +72,7 @@ final class QuoteEngine: ObservableObject {
 
     func tick() async {
         guard isMarketOpen() else { return }
-        let symbols = watchlistStore.symbols
+        let symbols = watchlistRepository.symbols
         guard !symbols.isEmpty else { return }
 
         do {
@@ -90,14 +90,14 @@ final class QuoteEngine: ObservableObject {
 
     private func evaluateAlerts(quotes: [Quote]) async {
         for quote in quotes {
-            for alert in alertStore.alerts(for: quote.symbol) where alert.evaluate(against: quote) {
+            for alert in alertRepository.alerts(for: quote.symbol) where alert.evaluate(against: quote) {
                 await notifications.schedule(
                     id: alert.id.uuidString,
                     title: "\(alert.symbol) alert",
                     body: "\(alert.symbol) is \(String(format: "%.2f", quote.price)) "
                         + "(\(String(format: "%+.2f%%", quote.changePercent)))"
                 )
-                alertStore.markTriggered(alert)
+                alertRepository.markTriggered(id: alert.id)
             }
         }
     }

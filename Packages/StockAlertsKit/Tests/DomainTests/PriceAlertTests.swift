@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import Domain
-@testable import StockAlerts
 
 struct PriceAlertTests {
 
@@ -119,14 +118,14 @@ struct PriceAlertTests {
 
     @Test
     func disabledAlert_neverTriggers() {
-        let alert = PriceAlert(symbol: "AAPL", condition: .above, threshold: 1)
+        var alert = PriceAlert(symbol: "AAPL", condition: .above, threshold: 1)
         alert.isEnabled = false
         #expect(alert.evaluate(against: makeQuote(price: 9999)) == false)
     }
 
     @Test
     func alreadyTriggeredAlert_doesNotRetrigger() {
-        let alert = PriceAlert(symbol: "AAPL", condition: .above, threshold: 1)
+        var alert = PriceAlert(symbol: "AAPL", condition: .above, threshold: 1)
         alert.isTriggered = true
         #expect(alert.evaluate(against: makeQuote(price: 9999)) == false)
     }

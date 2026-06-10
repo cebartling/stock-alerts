@@ -1,10 +1,13 @@
 import SwiftUI
 import SwiftData
+import Adapters
 
 struct MainWindowView: View {
     @EnvironmentObject private var engine: QuoteEngine
     @Environment(\.modelContext) private var context
-    @Query(sort: \WatchedSymbol.sortOrder) private var symbols: [WatchedSymbol]
+    // Interim: reads on @Query for live updates; writes route through the
+    // repository port. The view-model swap lands in Phase 4.
+    @Query(sort: \SymbolRecord.sortOrder) private var symbols: [SymbolRecord]
 
     @State private var selection: String?
     @State private var newSymbol: String = ""
@@ -49,10 +52,10 @@ struct MainWindowView: View {
                             .tag(item.symbol)
                     }
                     .onDelete { offsets in
+                        let repository = SwiftDataWatchlistRepository(context: context)
                         for index in offsets {
-                            context.delete(symbols[index])
+                            repository.remove(symbols[index].symbol)
                         }
-                        try? context.save()
                     }
                 }
             }
@@ -81,7 +84,7 @@ struct MainWindowView: View {
     }
 
     @ViewBuilder
-    private func sidebarRow(_ item: WatchedSymbol) -> some View {
+    private func sidebarRow(_ item: SymbolRecord) -> some View {
         HStack {
             Text(item.symbol).fontWeight(.medium)
             Spacer()
@@ -122,8 +125,8 @@ struct MainWindowView: View {
     private func addSymbol() {
         let trimmed = newSymbol.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        let store = WatchlistStore(context: context)
-        store.add(trimmed)
+        let repository = SwiftDataWatchlistRepository(context: context)
+        repository.add(trimmed)
         newSymbol = ""
     }
 }

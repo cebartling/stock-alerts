@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import Domain
+import Adapters
 
 @main
 struct StockAlertsApp: App {
@@ -11,19 +12,19 @@ struct StockAlertsApp: App {
     init() {
         let container: ModelContainer
         do {
-            container = try ModelContainer(for: WatchedSymbol.self, PriceAlert.self)
+            container = try ModelContainer(for: SymbolRecord.self, AlertRecord.self)
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
         self.container = container
 
-        let alertStore = AlertStore(context: container.mainContext)
-        let watchlistStore = WatchlistStore(context: container.mainContext)
+        let alertRepository = SwiftDataAlertRepository(context: container.mainContext)
+        let watchlistRepository = SwiftDataWatchlistRepository(context: container.mainContext)
         let service = FinnhubQuoteService(apiKey: Secrets.finnhubKey)
         let engine = QuoteEngine(
             service: service,
-            alertStore: alertStore,
-            watchlistStore: watchlistStore,
+            alertRepository: alertRepository,
+            watchlistRepository: watchlistRepository,
             isMarketOpen: {
                 let extended = UserDefaults.standard.bool(forKey: DefaultsKey.extendedHours)
                 return MarketClock.isOpen(at: .now, extended: extended)

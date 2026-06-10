@@ -1,10 +1,13 @@
 import SwiftUI
 import SwiftData
+import Adapters
 
 struct MenuBarPopoverView: View {
     @EnvironmentObject private var engine: QuoteEngine
     @Environment(\.openWindow) private var openWindow
-    @Query(sort: \WatchedSymbol.sortOrder) private var symbols: [WatchedSymbol]
+    // Interim: reads stay on @Query for live updates; the clean view-model swap
+    // lands in Phase 4. Writes already route through the repository ports.
+    @Query(sort: \SymbolRecord.sortOrder) private var symbols: [SymbolRecord]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -63,7 +66,7 @@ struct MenuBarPopoverView: View {
     }
 
     @ViewBuilder
-    private func row(for item: WatchedSymbol) -> some View {
+    private func row(for item: SymbolRecord) -> some View {
         HStack {
             Text(item.symbol).fontWeight(.medium)
             Spacer()
