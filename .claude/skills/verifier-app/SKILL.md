@@ -1,146 +1,144 @@
 ---
-name: verifier-gui
-description: Verify StockAlerts UI/view changes by launching the menu-bar app and driving it (open window, add/delete/reorder watchlist symbols, create/reset/delete alerts) with screenshots as evidence. Use when verifying SwiftUI view or QuoteEngineViewModel changes that need runtime observation rather than just tests — especially anything touching live list updates (the views read from QuoteEngineViewModel.refresh(), not SwiftData @Query). Requires macOS Accessibility permission for the controlling terminal.
+name: verifier-app
+description: Verify StockAlerts behavior at runtime by driving the dev HTTP control server with curl (read EngineState, add/remove watchlist symbols, create/reset/delete alerts, force a poll) — deterministic, no Accessibility, no side effects. Use when verifying QuoteEngine / repository / QuoteEngineViewModel / view behavior, especially live list updates (views read QuoteEngineViewModel.refresh(), not SwiftData @Query). A GUI screenshot path is included only for confirming actual pixel rendering.
 ---
 
-# verifier-gui
+# verifier-app
 
-StockAlerts is a `LSUIElement` menu-bar app (no Dock icon). Its views observe
-`QuoteEngineViewModel`, which re-reads the SwiftData repositories via `refresh()`
-after every mutation and republishes through `@Published` — there is **no
-`@Query`**, so "does the list update after I add/delete something?" can only be
-answered by driving the running UI. That's what this skill does.
+StockAlerts is a `LSUIElement` menu-bar app. In **Debug builds** it starts a
+dev-only HTTP control server (`DevHTTPServer`, `#if DEBUG`, `127.0.0.1:8765`,
+overridable via `STOCKALERTS_DEV_PORT`) — a second driving adapter over the same
+`QuoteEngine` + repository ports the UI uses. **Prefer HTTP for behavior, state,
+and data verification.** It's deterministic, needs no Accessibility, and has no
+side effects.
 
-The evidence is screenshots + the AX-read row text of the running app. Tests and
-`swiftlint` are **not** evidence here — CI already runs them.
+**Why HTTP-first (hard-won):** coordinate-driving the menu-bar GUI is brittle on
+a live machine and can leak keystrokes into whatever window is actually under the
+cursor — it once typed a stray comment into a browser tab. The HTTP surface
+avoids all of that. Use the GUI path (Step 3) **only** when the claim is about
+rendering/layout that HTTP can't show.
 
-## Step 0 — Accessibility permission (BLOCKING, do this first)
+Tests and `swiftlint` are **not** evidence here — CI runs them. Evidence is the
+running app's HTTP responses (and, for visual claims, a screenshot).
 
-Driving the menu bar and typing into fields needs the **controlling process**
-(the terminal/agent running `osascript`) to have macOS Accessibility permission.
-Detect it:
+## Step 1 — Build (Debug) and launch
 
-```bash
-# Use a REAL UI-element probe. Process *listing* (`count processes`) is NOT
-# AX-gated and gives a false "granted"; reading a process's menu bars IS.
-osascript -e 'tell application "System Events" to tell process "Finder" to count menu bars' >/dev/null 2>&1 \
-  && echo "AX: granted" \
-  || echo "AX: DENIED (error -25211)"
-```
-
-If DENIED, **stop and report BLOCKED** with these grant instructions — do not try
-to click via `cliclick`/coordinates instead (synthetic clicks *and* keystrokes
-are both AX-gated, and the add-symbol flow needs typing):
-
-> System Settings → Privacy & Security → Accessibility → enable the terminal app
-> that runs this agent (e.g. Terminal, iTerm, cmux). Then re-run.
-
-Also note: if a terminal is in macOS **full-screen**, the system menu bar is
-hidden and the status item can't be clicked — tell the user to exit full-screen.
-
-## Step 1 — Build / locate and launch
-
-Prefer the already-built signed bundle (the app must be dev-signed for the
-keychain entitlement — see CLAUDE.md "Signing"):
+The dev server is `#if DEBUG` and starts from `StockAlertsApp.init` at launch
+(not the MenuBarExtra `.task`, which only runs when the popover first opens). So
+a **Debug** build is required; Release compiles the server out entirely.
 
 ```bash
 APP=$(find ~/Library/Developer/Xcode/DerivedData/StockAlerts-*/Build/Products/Debug \
       -maxdepth 1 -name 'StockAlerts.app' 2>/dev/null | head -1)
-# If none, build it (signed): ./scripts/test.sh builds the app target, or:
+# Build if missing (signed — keychain entitlement needs a real dev cert; see CLAUDE.md):
 #   xcodebuild -project StockAlerts.xcodeproj -scheme StockAlerts -configuration Debug \
 #     -destination 'platform=macOS,arch=arm64' -allowProvisioningUpdates build
-codesign -dv "$APP" 2>&1 | grep -q "Signature size" && echo "signed: yes"
 open "$APP"; sleep 3
-pgrep -lf "StockAlerts.app/Contents/MacOS/StockAlerts" | head -1   # confirm running
-ls -t ~/Library/Logs/DiagnosticReports/StockAlerts-*.ips 2>/dev/null | head -1 || echo "no crash report"
+pgrep -f 'StockAlerts.app/Contents/MacOS/StockAlerts' >/dev/null && echo "running" || echo "NOT running"
+lsof -nP -iTCP:8765 2>/dev/null | grep -q LISTEN && echo "dev server: listening" || echo "dev server: NOT listening"
 ```
 
-A clean launch already verifies the composition root, `QuoteEngineViewModel.init`,
-and `ModelContainer(for: SymbolRecord, AlertRecord)` don't trap. No Finnhub key is
-needed — watchlist/alert CRUD and live list updates don't depend on quotes.
+A clean launch + listening port already exercises the composition root,
+`QuoteEngineViewModel.init`, the `ModelContainer(SymbolRecord, AlertRecord)`, and
+`DevHTTPServer.start()`. If it launches but isn't listening, you likely have a
+**Release** build, or `start()` threw — check `log show --predicate 'process ==
+"StockAlerts"' --last 2m | grep DevHTTP`.
 
-## Step 2 — Open the window
+## Step 2 — Drive + assert over curl (PRIMARY)
 
-Click the menu-bar status item, then "Open Stock Alerts". Element references below
-are best-effort against the SwiftUI AX tree; adjust indices if the tree differs
-(dump it with `… entire contents of menu bar 1` to inspect).
-
-```bash
-osascript <<'EOF'
-tell application "System Events" to tell process "StockAlerts"
-    set frontmost to true
-    click menu bar item 1 of menu bar 1   -- the MenuBarExtra status item -> opens popover
-    delay 0.5
-    -- popover content is a window; click the "Open Stock Alerts" button
-    click (first button of window 1 whose description contains "Open Stock Alerts")
-    delay 0.8
-end tell
-EOF
+Endpoints:
+```
+GET    /state                     -> {quotes, lastError, lastSuccessfulFetch, clockTick}
+GET    /watchlist                 -> ["AAPL", ...]
+POST   /watchlist  {"symbol":"X"} -> updated ["AAPL","X"]   (addSymbol -> refresh)
+DELETE /watchlist/{symbol}        -> updated [...]
+GET    /alerts?symbol=AAPL        -> [AlertDTO]
+POST   /alerts {"symbol","condition","threshold"} -> created AlertDTO  (condition: above|below|percentChangeUp|percentChangeDown)
+POST   /alerts/{id}/reset         -> {"ok":true}
+DELETE /alerts/{id}               -> {"ok":true}
+POST   /tick                      -> StateDTO after a real Finnhub fetch
 ```
 
-If the status-item click is unreliable, capture its position and click via coords:
-`position of menu bar item 1 of menu bar 1` → feed to `cliclick c:X,Y`.
+The poll loop only starts once the popover opens, so quotes in `/state` are empty
+until you **`POST /tick`** — which is also the deterministic way to drive a fetch.
 
-## Step 3 — Drive a mutation and OBSERVE the list update (the actual claim)
-
-Set the "Add symbol" field, click Add, then read the sidebar rows back — this is
-the R1 check: the row must appear **without** a manual refresh.
-
+Canonical R1 flow (each line is a step; note the before/after):
 ```bash
-osascript <<'EOF'
-tell application "System Events" to tell process "StockAlerts"
-    set win to window "Stock Alerts"
-    set value of text field 1 of win to "AAPL"
-    click (first button of win whose name is "Add")
-    delay 0.6
-    -- read sidebar row labels as text evidence
-    return value of static texts of win
-end tell
-EOF
-screencapture -x /tmp/verify-after-add.png   # screenshot evidence
+P=${STOCKALERTS_DEV_PORT:-8765}
+curl -s localhost:$P/watchlist; echo                                   # baseline
+curl -s -XPOST localhost:$P/watchlist -d '{"symbol":"MSFT"}'; echo     # add -> updated list (R1)
+curl -s localhost:$P/watchlist; echo                                   # MSFT present
+curl -s -XPOST localhost:$P/tick | python3 -m json.tool | head -20     # real quotes for AAPL/MSFT
+curl -s -XPOST localhost:$P/alerts -d '{"symbol":"AAPL","condition":"above","threshold":1}'; echo
+curl -s "localhost:$P/alerts?symbol=AAPL"; echo                        # includes the new alert
+curl -s -XDELETE localhost:$P/watchlist/MSFT; echo                     # remove -> back to baseline
+curl -s -o /dev/null -w '404? %{http_code}\n' localhost:$P/nope        # unknown -> 404
+curl -s -o /dev/null -w '400? %{http_code}\n' -XPOST localhost:$P/watchlist -d 'garbage'  # malformed -> 400
 ```
 
-PASS for the add path = "AAPL" appears in the returned static texts (and the
-screenshot) immediately after Add, with no other action.
+PASS = the mutations reflect in the immediately-following read (add shows up,
+delete removes it), `/tick` returns live quotes, and the error paths give 404/400.
+At least one 🔍 probe (the 404/400 lines, or a double-add no-op) every run.
 
-## Step 4 — Probes (pick what the change points at)
+**Clean up data you added:** `DELETE` any symbols/alerts you created so the store
+is left as you found it.
 
-- 🔍 **Delete**: select the row, `delete` key or the row's delete affordance →
-  re-read rows → it's gone (exercises `viewModel.removeSymbols`/`removeSymbol` →
-  `refresh()`).
-- 🔍 **Reorder**: drag a row (or driver-permitting) → order changes and persists.
-- 🔍 **Alerts**: open a symbol (`SymbolDetailView`), set the threshold field, click
-  "Add alert" → it appears under the symbol; Reset/trash → updates at once
-  (exercises `addAlert`/`resetAlert`/`removeAlert` → `refresh()`).
-- 🔍 **Persistence**: quit and relaunch → the symbol/alert is still there
-  (`SwiftData*Repository` round-trip).
-- 🔍 **Empty add**: click Add with the field empty → no-op, no crash.
+## Step 3 — Visual confirmation (OPTIONAL — only for rendering/layout claims)
 
-## Step 5 — Capture and clean up
+HTTP proves data and behavior, not pixels. If the claim is specifically about
+*how it looks* (a new badge, layout, color, the Market-Open dot), confirm with a
+screenshot — but only then, and carefully:
+
+- **Accessibility gate** (needed for menu/AX driving): a real UI-element probe,
+  not `count processes` (which isn't AX-gated and falsely reports granted):
+  ```bash
+  osascript -e 'tell application "System Events" to tell process "Finder" to count menu bars' \
+    >/dev/null 2>&1 && echo "AX: granted" || echo "AX: DENIED (-25211)"
+  ```
+  If denied: System Settings → Privacy & Security → Accessibility → enable the
+  controlling terminal, then retry. If a terminal is **full-screen**, the system
+  menu bar is hidden — exit full-screen first.
+- **Open the main window reliably via the menu** (not a coordinate click on the
+  transient popover): `Window ▸ Stock Alerts`:
+  ```bash
+  osascript -e 'tell application "System Events" to tell process "StockAlerts" to \
+    click menu item "Stock Alerts" of menu 1 of menu bar item "Window" of menu bar 1'
+  ```
+- **Screenshot the window region** (get geometry from AX, capture in points):
+  ```bash
+  osascript -e 'tell application "System Events" to tell process "StockAlerts" to get position of window 1'
+  osascript -e 'tell application "System Events" to tell process "StockAlerts" to get size of window 1'
+  # then, with x,y,w,h:  screencapture -x -R<x>,<y>,<w>,<h> /tmp/verify.png
+  ```
+- **NEVER blind coordinate-click or type.** SwiftUI window/popover content is an
+  `NSHostingView` that doesn't expose its controls to System Events, which tempts
+  coordinate clicks — that's exactly what leaks keystrokes into other windows.
+  Drive *data* over HTTP (Step 2); use the GUI only to *look*. If you must click,
+  `AXRaise` the StockAlerts window and confirm it's frontmost and covers the
+  point first.
+
+## Step 4 — Clean up
 
 ```bash
-# screenshots live in /tmp/verify-*.png; reference them in the report.
 osascript -e 'tell application "StockAlerts" to quit' 2>/dev/null \
   || kill "$(pgrep -f 'StockAlerts.app/Contents/MacOS/StockAlerts')" 2>/dev/null
 ```
-
-If `SendUserFile` is available, send the screenshots so the reviewer can see them;
-otherwise reference the `/tmp/verify-*.png` paths and keep the AX-read row text
-inline (text travels in the report, a bare path only works on a shared filesystem).
+Reference any `/tmp/verify-*.png` in the report; if `SendUserFile` exists, send
+them. HTTP response bodies travel inline as evidence.
 
 ## Report
 
-Use the standard verify report shape (Verdict / Claim / Method / Steps / Findings).
-Verdicts specific to this surface:
+Standard verify shape (Verdict / Claim / Method / Steps / Findings). Verdicts:
 
-- **PASS** — you drove the running app and the list changed live after the
-  mutation (row text + screenshot show it).
-- **FAIL** — you drove it and the list did **not** update after a mutation (the
-  R1 regression), or a mutation crashed the app.
-- **BLOCKED** — Accessibility denied (Step 0), app wouldn't launch, or the menu
-  bar was hidden (full-screen). Say which, with the Step 0 grant instructions.
-- **SKIP** — the change has no UI surface (pure Domain/Application/Adapters logic;
-  that's already covered by `swift test`). One line why.
+- **PASS** — you drove the running app over HTTP and the behavior held (mutations
+  reflected on read; `/tick` returned live quotes; error paths correct). For
+  visual claims, the screenshot shows the expected rendering.
+- **FAIL** — a mutation didn't reflect on the next read (R1 regression), `/tick`
+  or an endpoint errored unexpectedly, or the app crashed.
+- **BLOCKED** — Debug app wouldn't launch, or the dev port never came up (and you
+  couldn't tell why from the log). For a *visual-only* claim, Accessibility denied
+  or menu bar hidden. Say which.
+- **SKIP** — pure Domain/Application/Adapters change with no runtime-observable
+  behavior beyond what `swift test` covers. One line why.
 
-Every run includes at least one 🔍 probe. A clean launch alone is **not** PASS —
-it doesn't show a list updating; that's at most a note under a BLOCKED verdict.
+A clean launch alone is **not** PASS — drive at least one mutation+read over HTTP.

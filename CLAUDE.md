@@ -37,20 +37,26 @@ Three scenes in `StockAlertsApp`:
 2. `Window("Stock Alerts", id: "main") { MainWindowView() }` — single-instance main window (`NavigationSplitView` sidebar + `SymbolDetailView`). Opened via `@Environment(\.openWindow)` from the popover, paired with `NSApp.activate(ignoringOtherApps: true)` so it becomes frontmost despite `LSUIElement=YES`.
 3. `Settings { SettingsView() }` — macOS Settings scene; opened from the popover's gear via `SettingsLink`.
 
-`QuoteEngine` (Application module) is a **framework-free** `@MainActor` core. It exposes state as a plain `EngineState` value via `private(set) var state` and an `onStateChange` callback — no `@Published`, no `ObservableObject`. The SwiftUI adapter `QuoteEngineViewModel` (app target, `StockAlerts/Views/`) sets `engine.onStateChange` to mirror state into `@Published` fields and observes the engine for the views:
+`QuoteEngine` (Application module) is a **framework-free** `@MainActor` core. It exposes state as a plain `EngineState` value via `private(set) var state` and an `onStateChange` callback — no `@Published`, no `ObservableObject`. The SwiftUI adapter `QuoteEngineViewModel` (app target, `StockAlerts/Views/`) sets `engine.onStateChange` to mirror state into `@Published` fields and observes the engine for the views. A second, `#if DEBUG` driving adapter (the dev HTTP server, below) drives the same core:
 
-```
-WatchlistRepository ──┐
-                      ▼
-                 QuoteEngine ──(polls)── QuoteService protocol ── FinnhubQuoteService
-                   │  │                                          (actor, URLSession)
-                   │  └─ alerts(for:) / markTriggered(id:) ── AlertRepository
-                   │
-                   └─ schedule notifications ── NotificationScheduler protocol
-                                               └── UNUserNotificationScheduler (prod)
+```mermaid
+graph LR
+    VM["QuoteEngineViewModel<br/>(@Published → SwiftUI views)"] --> ENG
+    DEV["DevHTTPServer #if DEBUG<br/>(curl)"] --> ENG
+    ENG["QuoteEngine + EngineState<br/>(framework-free core)"]
+    ENG -- polls --> QS["QuoteService"]
+    ENG -- "alerts(for:) / markTriggered(id:)" --> AR["AlertRepository / WatchlistRepository"]
+    ENG -- schedule --> NS["NotificationScheduler"]
+    QS -. prod .-> FIN["FinnhubQuoteService (actor, URLSession)"]
+    AR -. prod .-> SD["SwiftData repositories + records"]
+    NS -. prod .-> UN["UNUserNotificationScheduler"]
+    ENG -. onStateChange .-> VM
 
-       QuoteEngine.state ──onStateChange──▶ QuoteEngineViewModel (@Published) ──▶ SwiftUI views
+    classDef core fill:#e8f5e9,stroke:#2e7d32;
+    class ENG core;
 ```
+
+See [ADR-0009](documentation/adr/0009-hexagonal-architecture.md) for the full rationale.
 
 Critical injection seams (driven ports in `Domain`) that exist **only** so tests can replace them. Do not collapse:
 
@@ -81,11 +87,22 @@ Because the views no longer use SwiftData's `@Query` (it's hidden behind the rep
 
 `QuoteEngine.start()` launches a `Task` loop that calls `tick()` and sleeps `pollInterval` seconds. `tick()` gates on `isMarketOpen()` (injected closure) and skips if the watchlist is empty. `PowerObserver` (`Adapters/PowerObserver.swift`) wires `NSWorkspace.willSleepNotification` → `viewModel.stop()` and `didWakeNotification` → `viewModel.start()` — this is the only reason the app has a `PowerObserver` field on `StockAlertsApp`.
 
+### Dev HTTP control server
+
+`StockAlerts/DevHTTP/` (entirely `#if DEBUG`) is a second driving adapter: an `NWListener` HTTP server on `127.0.0.1:8765` (override with `STOCKALERTS_DEV_PORT`) that drives the same `QuoteEngineViewModel` the UI does. It exists so the running app can be interrogated/driven with `curl` instead of macOS Accessibility — the `verifier-app` skill (`.claude/skills/verifier-app/`) uses it as its primary verification path.
+
+- Pieces: `DevControlSurface` (port + `StateDTO`/`AlertDTO`) → `AppDevControlSurface` (binds onto the view-model) → `DevHTTPRouter` (pure, unit-tested in `DevHTTPRouterTests`) → `DevHTTPServer` (parses off-main, hops to `@MainActor`).
+- Routes: `GET /state`, `GET/POST/DELETE /watchlist`, `GET/POST /alerts` + `POST /alerts/{id}/reset` + `DELETE /alerts/{id}`, `POST /tick`. Example: `curl -s -XPOST localhost:8765/watchlist -d '{"symbol":"MSFT"}'`.
+- Started from **`StockAlertsApp.init`**, not the `MenuBarExtra` `.task` (which only runs once the popover opens). The poll loop also only starts on popover-open, so `POST /tick` is how you populate `/state` on a fresh launch.
+- The whole directory is compiled out of Release (`#if DEBUG`) — verified the `DevHTTPServer` symbol is absent from a Release binary. See [ADR-0010](documentation/adr/0010-dev-http-control-server.md).
+
 ## Signing and entitlements
 
 Signing is non-negotiable because `keychain-access-groups` requires development signing, not ad-hoc. `Local.xcconfig` supplies `DEVELOPMENT_TEAM`; it's gitignored with `Local.xcconfig.example` committed as the template. If `Local.xcconfig` is missing, `scripts/test.sh` exits with a helpful message; if `xcodebuild test` is invoked directly without `-allowProvisioningUpdates`, signing fails with "No profiles for …".
 
 Any entitlement change goes through `project.yml` (under `targets.StockAlerts.entitlements.properties`), not by hand-editing `StockAlerts.entitlements` — the file is regenerated on every `xcodegen generate`.
+
+`com.apple.security.network.server` is declared for the Debug-only dev HTTP server (above). All server code is `#if DEBUG`, so Release opens no port; the entitlement is inert there.
 
 ## SourceKit diagnostics
 
